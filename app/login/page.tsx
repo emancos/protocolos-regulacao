@@ -84,7 +84,7 @@ export default function LoginPage() {
                                 required
                             />
                         </div>
-                        <div className="space-y-2">
+                        <div className="space-y-2 mb-4">
                             <Label htmlFor="password">Senha</Label>
                             <div className="relative">
                                 <Input
