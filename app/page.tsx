@@ -3,13 +3,15 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Shield, Users, Zap } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { FirebaseStatus } from "@/components/firebase-status"
 
 export default function HomePage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
       <div className="container mx-auto px-4 py-8">
         {/* Header com botão de tema */}
-        <div className="flex justify-end mb-8">
+        <div className="flex justify-between items-center mb-8">
+          <FirebaseStatus />
           <ThemeToggle />
         </div>
 
