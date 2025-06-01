@@ -43,10 +43,10 @@ function DashboardContent() {
 
             <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
                 <div className="px-4 py-6 sm:px-0">
-                    {/* Componente de Debug - Remover em produção */}
+                    {/* Debug Info - Só para administradores */}
                     <DebugUserInfo />
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {/* Perfil do Usuário */}
                         <Card className="md:col-span-2 lg:col-span-1">
                             <CardHeader className="text-center">
@@ -64,13 +64,13 @@ function DashboardContent() {
                                 <div className="flex items-center space-x-2">
                                     <User className="h-4 w-4 text-gray-500" />
                                     <span className="text-sm">
-                                        <strong>Nome:</strong> {user?.displayName || "Não informado"}
+                                        <strong>Nome:</strong> {userProfile?.displayName || user?.displayName || "Não informado"}
                                     </span>
                                 </div>
                                 <div className="flex items-center space-x-2">
                                     <Mail className="h-4 w-4 text-gray-500" />
                                     <span className="text-sm">
-                                        <strong>Email:</strong> {user?.email}
+                                        <strong>Email:</strong> {userProfile?.email || user?.email}
                                     </span>
                                 </div>
                                 <div className="flex items-center space-x-2">
@@ -78,8 +78,20 @@ function DashboardContent() {
                                     <span className="text-sm">
                                         <strong>Perfil:</strong>
                                     </span>
-                                    {userProfile && <UserRoleBadge role={userProfile.role} />}
+                                    {userProfile ? (
+                                        <UserRoleBadge role={userProfile.role} />
+                                    ) : (
+                                        <span className="text-xs text-gray-500">Carregando...</span>
+                                    )}
                                 </div>
+                                {userProfile?.additionalInfo?.telefone && (
+                                    <div className="flex items-center space-x-2">
+                                        <Settings className="h-4 w-4 text-gray-500" />
+                                        <span className="text-sm">
+                                            <strong>Telefone:</strong> {userProfile.additionalInfo.telefone}
+                                        </span>
+                                    </div>
+                                )}
                                 <div className="pt-4 border-t">
                                     <p className="text-xs text-gray-500">
                                         Última autenticação:{" "}
