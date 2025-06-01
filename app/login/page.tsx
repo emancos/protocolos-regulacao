@@ -2,6 +2,8 @@
 
 import type React from "react"
 
+import { ArrowLeft } from "lucide-react"
+
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
@@ -74,6 +76,13 @@ export default function LoginPage() {
             <div className="absolute top-4 right-4">
                 <ThemeToggle />
             </div>
+            <div className="absolute top-4 left-4">
+                <Link href="/">
+                    <Button variant="outline" className="w-full">
+                        <ArrowLeft className="h-4 w-4 mr-2" />Voltar
+                    </Button>
+                </Link>
+            </div>
             <Card className="w-full max-w-md">
                 <CardHeader className="space-y-1">
                     <CardTitle className="text-2xl font-bold text-center">Login</CardTitle>
@@ -121,7 +130,7 @@ export default function LoginPage() {
                         </div>
                     </CardContent>
                     <CardFooter className="flex flex-col space-y-4">
-                        <Button type="submit" className="w-full" disabled={loading}>
+                        <Button type="submit" className="w-full mt-4" disabled={loading}>
                             {loading ? "Entrando..." : "Entrar"}
                         </Button>
                         <p className="text-sm text-center text-gray-600">
