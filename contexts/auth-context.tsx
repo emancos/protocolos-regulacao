@@ -17,7 +17,7 @@ interface AuthContextType {
     user: User | null
     loading: boolean
     login: (email: string, password: string) => Promise<void>
-    register: (email: string, password: string, name: string) => Promise<void>
+    register: (email: string, password: string, name: string) => Promise<{ user: User }>
     logout: () => Promise<void>
 }
 
@@ -45,8 +45,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     const register = async (email: string, password: string, name: string) => {
-        const { user } = await createUserWithEmailAndPassword(auth, email, password)
-        await updateProfile(user, { displayName: name })
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password)
+        await updateProfile(userCredential.user, { displayName: name })
+        return { user: userCredential.user }
     }
 
     const logout = async () => {
