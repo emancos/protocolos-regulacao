@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { createContext, useContext, useEffect, useState } from "react"
+import { createContext, useContext, useEffect, useState, useCallback } from "react"
 import { useAuth } from "@/contexts/auth-context"
 import { type UserProfile, UserRole, ROLE_PERMISSIONS } from "@/types/user"
 import { UserService } from "@/lib/user-service"
@@ -25,7 +25,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
     const [loading, setLoading] = useState(true)
 
-    const loadUserProfile = async () => {
+    const loadUserProfile = useCallback(async () => {
         if (!user) {
             setUserProfile(null)
             setLoading(false)
@@ -39,7 +39,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
             let profile = await UserService.getUserProfile(user.uid)
 
             if (!profile) {
-                // Cria como paciente se não for o primeiro
+
                 await UserService.createUserProfile(
                     user.uid,
                     user.email || "",
@@ -59,24 +59,30 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         } finally {
             setLoading(false)
         }
-    }
+    }, [user])
 
     useEffect(() => {
         loadUserProfile()
-    }, [user])
+    }, [loadUserProfile])
 
-    const hasPermission = (permission: keyof (typeof ROLE_PERMISSIONS)[UserRole]): boolean => {
-        if (!userProfile) return false
-        return ROLE_PERMISSIONS[userProfile.role][permission]
-    }
+    const hasPermission = useCallback(
+        (permission: keyof (typeof ROLE_PERMISSIONS)[UserRole]): boolean => {
+            if (!userProfile) return false
+            return ROLE_PERMISSIONS[userProfile.role][permission]
+        },
+        [userProfile],
+    )
 
-    const isRole = (role: UserRole): boolean => {
-        return userProfile?.role === role
-    }
+    const isRole = useCallback(
+        (role: UserRole): boolean => {
+            return userProfile?.role === role
+        },
+        [userProfile],
+    )
 
-    const refreshProfile = async () => {
+    const refreshProfile = useCallback(async () => {
         await loadUserProfile()
-    }
+    }, [loadUserProfile])
 
     const value = {
         userProfile,
