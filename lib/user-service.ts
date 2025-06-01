@@ -29,19 +29,28 @@ export class UserService {
     }
 
     static async getUserProfile(uid: string): Promise<UserProfile | null> {
-        const docRef = doc(db, this.COLLECTION, uid)
-        const docSnap = await getDoc(docRef)
+        try {
+            console.log("Buscando perfil para UID:", uid)
+            const docRef = doc(db, this.COLLECTION, uid)
+            const docSnap = await getDoc(docRef)
 
-        if (docSnap.exists()) {
-            const data = docSnap.data()
-            return {
-                ...data,
-                createdAt: data.createdAt.toDate(),
-                updatedAt: data.updatedAt.toDate(),
-            } as UserProfile
+            if (docSnap.exists()) {
+                const data = docSnap.data()
+                console.log("Dados encontrados:", data)
+
+                return {
+                    ...data,
+                    createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt),
+                    updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : new Date(data.updatedAt),
+                } as UserProfile
+            } else {
+                console.log("Nenhum documento encontrado para UID:", uid)
+                return null
+            }
+        } catch (error) {
+            console.error("Erro ao buscar perfil do usuário:", error)
+            return null
         }
-
-        return null
     }
 
     static async updateUserRole(uid: string, newRole: UserRole, updatedBy: string): Promise<void> {

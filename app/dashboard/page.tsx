@@ -10,6 +10,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { LogOut, User, Mail, UserPlus, Users, Settings } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
 import Link from "next/link"
+import { DebugUserInfo } from "@/components/debug-user-info"
 
 function DashboardContent() {
     const { user, logout } = useAuth()
@@ -42,7 +43,10 @@ function DashboardContent() {
 
             <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
                 <div className="px-4 py-6 sm:px-0">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {/* Componente de Debug - Remover em produção */}
+                    <DebugUserInfo />
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
                         {/* Perfil do Usuário */}
                         <Card className="md:col-span-2 lg:col-span-1">
                             <CardHeader className="text-center">

@@ -35,23 +35,27 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         try {
             setLoading(true)
 
-            // Verifica se é o primeiro usuário e o torna admin
-            await UserService.initializeFirstAdmin(user.uid, user.email || "", user.displayName || "")
-
-            // Carrega o perfil do usuário
-            const profile = await UserService.getUserProfile(user.uid)
+            // Primeiro, tenta carregar o perfil existente
+            let profile = await UserService.getUserProfile(user.uid)
 
             if (!profile) {
-                // Se não existe perfil, cria um como PACIENTE por padrão
-                await UserService.createUserProfile(user.uid, user.email || "", user.displayName || "", UserRole.PACIENTE)
+                // Cria como paciente se não for o primeiro
+                await UserService.createUserProfile(
+                    user.uid,
+                    user.email || "",
+                    user.displayName || "",
+                    UserRole.PACIENTE,
+                    "system",
+                )
 
-                const newProfile = await UserService.getUserProfile(user.uid)
-                setUserProfile(newProfile)
-            } else {
-                setUserProfile(profile)
+                // Recarrega o perfil após criar
+                profile = await UserService.getUserProfile(user.uid)
             }
+
+            setUserProfile(profile)
         } catch (error) {
             console.error("Erro ao carregar perfil do usuário:", error)
+            setUserProfile(null)
         } finally {
             setLoading(false)
         }
