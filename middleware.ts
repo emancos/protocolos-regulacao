@@ -1,16 +1,14 @@
 import { type NextRequest, NextResponse } from "next/server"
 
 export function middleware(request: NextRequest) {
-    // Rotas que requerem autenticação
-    const protectedRoutes = ["/dashboard"]
-
     // Rotas públicas que usuários autenticados não deveriam acessar
-    const authRoutes = ["/login", "/register"]
+    const authRoutes = ["/login"]
 
     const { pathname } = request.nextUrl
 
-    // Para rotas protegidas, deixamos o AuthGuard do lado cliente lidar com a autenticação
-    // pois o Firebase Auth funciona principalmente no cliente
+    // Para rotas protegidas (/dashboard, /register), deixamos o AuthGuard
+    // do lado cliente lidar com a autenticação, pois o Firebase Auth
+    // funciona principalmente no cliente
 
     // Redireciona usuários já autenticados das páginas de auth
     // Nota: Esta verificação seria mais robusta com tokens do servidor

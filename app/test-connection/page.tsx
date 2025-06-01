@@ -9,6 +9,7 @@ import { auth, db } from "@/lib/firebase"
 import { collection, addDoc, getDocs, deleteDoc, doc } from "firebase/firestore"
 import { CheckCircle, Database, Shield, BarChart3 } from "lucide-react"
 import Link from "next/link"
+import { FirebaseError } from "firebase/app"
 
 export default function TestConnectionPage() {
     const [authStatus, setAuthStatus] = useState<"idle" | "testing" | "success" | "error">("idle")
@@ -23,7 +24,11 @@ export default function TestConnectionPage() {
             setMessage("Firebase Auth está funcionando corretamente!")
         } catch (error) {
             setAuthStatus("error")
-            setMessage(`Erro no Auth: ${error}`)
+            if (error instanceof FirebaseError) {
+                setMessage(`Erro no Auth: ${error.message}`)
+            } else {
+                setMessage("Erro desconhecido no Auth")
+            }
         }
     }
 
@@ -47,7 +52,11 @@ export default function TestConnectionPage() {
             setMessage("Firestore está funcionando corretamente!")
         } catch (error) {
             setFirestoreStatus("error")
-            setMessage(`Erro no Firestore: ${error}`)
+            if (error instanceof FirebaseError) {
+                setMessage(`Erro no Firestore: ${error.message}`)
+            } else {
+                setMessage("Erro desconhecido no Firestore")
+            }
         }
     }
 

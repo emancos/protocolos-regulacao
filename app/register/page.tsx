@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { useAuth } from "@/contexts/auth-context"
@@ -13,8 +13,10 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Eye, EyeOff } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { AuthGuard } from "@/components/auth-guard"
+import { FirebaseError } from "firebase/app"
 
-export default function RegisterPage() {
+function RegisterForm() {
     const [name, setName] = useState("")
     const [email, setEmail] = useState("")
     const [password, setPassword] = useState("")
@@ -22,14 +24,8 @@ export default function RegisterPage() {
     const [showPassword, setShowPassword] = useState(false)
     const [error, setError] = useState("")
     const [loading, setLoading] = useState(false)
-    const { register, user } = useAuth()
+    const { register } = useAuth()
     const router = useRouter()
-
-    useEffect(() => {
-        if (user) {
-            router.push("/dashboard")
-        }
-    }, [user, router])
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -50,16 +46,28 @@ export default function RegisterPage() {
         try {
             await register(email, password, name)
             router.push("/dashboard")
-        } catch (error: any) {
+        } catch (error) {
             console.error("Erro no registro:", error)
-            if (error.code === "auth/email-already-in-use") {
-                setError("Este email já está em uso")
-            } else if (error.code === "auth/invalid-email") {
-                setError("Email inválido")
-            } else if (error.code === "auth/weak-password") {
-                setError("Senha muito fraca. Use pelo menos 6 caracteres")
+
+            if (error instanceof FirebaseError) {
+                switch (error.code) {
+                    case "auth/email-already-in-use":
+                        setError("Este email já está em uso")
+                        break
+                    case "auth/invalid-email":
+                        setError("Email inválido")
+                        break
+                    case "auth/weak-password":
+                        setError("Senha muito fraca. Use pelo menos 6 caracteres")
+                        break
+                    case "auth/operation-not-allowed":
+                        setError("Operação não permitida. Entre em contato com o administrador")
+                        break
+                    default:
+                        setError("Erro ao criar conta. Tente novamente")
+                }
             } else {
-                setError("Erro ao criar conta. Tente novamente")
+                setError("Erro inesperado. Tente novamente")
             }
         } finally {
             setLoading(false)
@@ -73,8 +81,8 @@ export default function RegisterPage() {
             </div>
             <Card className="w-full max-w-md">
                 <CardHeader className="space-y-1">
-                    <CardTitle className="text-2xl font-bold text-center">Cadastro</CardTitle>
-                    <CardDescription className="text-center">Crie sua conta para começar</CardDescription>
+                    <CardTitle className="text-2xl font-bold text-center">Cadastrar Novo Usuário</CardTitle>
+                    <CardDescription className="text-center">Crie uma nova conta para outro usuário</CardDescription>
                 </CardHeader>
                 <form onSubmit={handleSubmit}>
                     <CardContent className="space-y-4">
@@ -88,7 +96,7 @@ export default function RegisterPage() {
                             <Input
                                 id="name"
                                 type="text"
-                                placeholder="Seu nome"
+                                placeholder="Nome do usuário"
                                 value={name}
                                 onChange={(e) => setName(e.target.value)}
                                 required
@@ -99,7 +107,7 @@ export default function RegisterPage() {
                             <Input
                                 id="email"
                                 type="email"
-                                placeholder="seu@email.com"
+                                placeholder="email@exemplo.com"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 required
@@ -111,7 +119,7 @@ export default function RegisterPage() {
                                 <Input
                                     id="password"
                                     type={showPassword ? "text" : "password"}
-                                    placeholder="Sua senha"
+                                    placeholder="Senha"
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
                                     required
@@ -127,12 +135,12 @@ export default function RegisterPage() {
                                 </Button>
                             </div>
                         </div>
-                        <div className="space-y-2 mb-4">
+                        <div className="space-y-2">
                             <Label htmlFor="confirmPassword">Confirmar senha</Label>
                             <Input
                                 id="confirmPassword"
                                 type="password"
-                                placeholder="Confirme sua senha"
+                                placeholder="Confirme a senha"
                                 value={confirmPassword}
                                 onChange={(e) => setConfirmPassword(e.target.value)}
                                 required
@@ -144,14 +152,21 @@ export default function RegisterPage() {
                             {loading ? "Criando conta..." : "Criar conta"}
                         </Button>
                         <p className="text-sm text-center text-gray-600">
-                            Já tem uma conta?{" "}
-                            <Link href="/login" className="text-blue-600 hover:underline">
-                                Faça login
+                            <Link href="/dashboard" className="text-blue-600 hover:underline">
+                                Voltar ao Dashboard
                             </Link>
                         </p>
                     </CardFooter>
                 </form>
             </Card>
         </div>
+    )
+}
+
+export default function RegisterPage() {
+    return (
+        <AuthGuard>
+            <RegisterForm />
+        </AuthGuard>
     )
 }

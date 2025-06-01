@@ -13,7 +13,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Eye, EyeOff } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
-
+import { FirebaseError } from "firebase/app"
 
 export default function LoginPage() {
     const [email, setEmail] = useState("")
@@ -38,18 +38,31 @@ export default function LoginPage() {
         try {
             await login(email, password)
             router.push("/dashboard")
-        } catch (error: any) {
+        } catch (error) {
             console.error("Erro no login:", error)
-            if (error.code === "auth/user-not-found") {
-                setError("Usuário não encontrado")
-            } else if (error.code === "auth/wrong-password") {
-                setError("Senha incorreta")
-            } else if (error.code === "auth/invalid-email") {
-                setError("Email inválido")
-            } else if (error.code === "auth/too-many-requests") {
-                setError("Muitas tentativas. Tente novamente mais tarde")
+
+            if (error instanceof FirebaseError) {
+                switch (error.code) {
+                    case "auth/user-not-found":
+                        setError("Usuário não encontrado")
+                        break
+                    case "auth/wrong-password":
+                        setError("Senha incorreta")
+                        break
+                    case "auth/invalid-email":
+                        setError("Email inválido")
+                        break
+                    case "auth/too-many-requests":
+                        setError("Muitas tentativas. Tente novamente mais tarde")
+                        break
+                    case "auth/invalid-credential":
+                        setError("Credenciais inválidas. Verifique seu email e senha")
+                        break
+                    default:
+                        setError("Erro ao fazer login. Verifique suas credenciais")
+                }
             } else {
-                setError("Erro ao fazer login. Verifique suas credenciais")
+                setError("Erro inesperado. Tente novamente")
             }
         } finally {
             setLoading(false)
@@ -84,7 +97,7 @@ export default function LoginPage() {
                                 required
                             />
                         </div>
-                        <div className="space-y-2 mb-4">
+                        <div className="space-y-2">
                             <Label htmlFor="password">Senha</Label>
                             <div className="relative">
                                 <Input
@@ -112,9 +125,9 @@ export default function LoginPage() {
                             {loading ? "Entrando..." : "Entrar"}
                         </Button>
                         <p className="text-sm text-center text-gray-600">
-                            Não tem uma conta?{" "}
-                            <Link href="/register" className="text-blue-600 hover:underline">
-                                Cadastre-se
+                            Esqueceu sua senha?{" "}
+                            <Link href="/forgot-password" className="text-blue-600 hover:underline">
+                                Recuperar
                             </Link>
                         </p>
                     </CardFooter>

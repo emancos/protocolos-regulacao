@@ -5,8 +5,9 @@ import { AuthGuard } from "@/components/auth-guard"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { LogOut, User, Mail } from "lucide-react"
+import { LogOut, User, Mail, UserPlus } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
+import Link from "next/link"
 
 function DashboardContent() {
     const { user, logout } = useAuth()
@@ -71,6 +72,15 @@ function DashboardContent() {
                                         : "Não disponível"}
                                 </p>
                             </div>
+
+                            {/* Botão para adicionar novo usuário */}
+                            <hr className="h-px my-8 bg-gray-200 border-0 dark:bg-gray-700" />
+                            <Button asChild className="w-full mt-4">
+                                <Link href="/register">
+                                    <UserPlus className="h-4 w-4 mr-2" />
+                                    Adicionar Novo Usuário
+                                </Link>
+                            </Button>
                         </CardContent>
                     </Card>
                 </div>
