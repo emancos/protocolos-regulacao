@@ -60,10 +60,10 @@ function RegisterForm() {
             return
         }
 
-        if (!cpf) {
+        /* if (!cpf) {
             setError("CPF é obrigatório")
             return
-        }
+        } */
 
         // Validações específicas por perfil
         if (role === UserRole.SOLICITANTE || role === UserRole.SOLICITANTE_REGULADO) {
@@ -239,14 +239,13 @@ function RegisterForm() {
                             </div>
 
                             <div className="space-y-2">
-                                <Label htmlFor="cpf">CPF *</Label>
+                                <Label htmlFor="cpf">CPF </Label>
                                 <InputMask
                                     id="cpf"
                                     mask="999.999.999-99"
                                     placeholder="000.000.000-00"
                                     value={cpf}
                                     onChange={(e: { target: { value: React.SetStateAction<string> } }) => setCpf(e.target.value)}
-                                    required
                                 />
                             </div>
 
