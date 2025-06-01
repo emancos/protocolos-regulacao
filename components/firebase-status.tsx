@@ -36,7 +36,7 @@ export function FirebaseStatus() {
         return (
             <Badge variant="default" className="flex items-center gap-1 bg-green-500">
                 <CheckCircle className="h-3 w-3" />
-                Firebase Conectado
+                Banco de dados conectado
             </Badge>
         )
     }
