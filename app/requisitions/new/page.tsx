@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/contexts/auth-context"
 import { AuthGuard } from "@/components/auth-guard"
@@ -21,7 +21,6 @@ import { ptBR } from "date-fns/locale"
 import { CalendarIcon, Plus, Trash2, ArrowLeft } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { RequisitionService } from "@/lib/requisition-service"
-import { StorageService } from "@/lib/storage-service"
 import { Priority, Status, PRIORITY_LABELS } from "@/types/requisitions"
 import Link from "next/link"
 import { ThemeToggle } from "@/components/theme-toggle"
@@ -31,10 +30,15 @@ import type { ProcedureItem } from "@/types/procedures"
 
 interface ImageFile {
     id: string
-    file: File
-    preview: string
+    file?: File
+    preview?: string
     name: string
     size: number
+    url?: string
+    uploaded?: boolean
+    uploading?: boolean
+    error?: string
+    oneDriveId?: string
 }
 
 export default function NewRequisitionPage() {
@@ -62,6 +66,18 @@ function NewRequisitionForm() {
     const [procedures, setProcedures] = useState<ProcedureItem[]>([])
     const [images, setImages] = useState<ImageFile[]>([])
 
+    // Debug: Log do estado das imagens
+    useEffect(() => {
+        const uploadedCount = images.filter((img) => img.uploaded).length
+        const uploadingCount = images.filter((img) => img.uploading).length
+        const errorCount = images.filter((img) => img.error).length
+        const pendingCount = images.filter((img) => img.file && !img.uploaded && !img.uploading && !img.error).length
+
+        console.log(
+            `📊 Images status - Total: ${images.length}, Uploaded: ${uploadedCount}, Uploading: ${uploadingCount}, Pending: ${pendingCount}, Errors: ${errorCount}`,
+        )
+    }, [images])
+
     const addPhoneField = () => {
         setPhones([...phones, ""])
     }
@@ -83,6 +99,7 @@ function NewRequisitionForm() {
             setIsGeneratingProtocol(true)
             const newProtocol = await RequisitionService.generateProtocol()
             setProtocol(newProtocol)
+            console.log(`📋 Generated protocol: ${newProtocol}`)
         } catch (error) {
             console.error("Erro ao gerar protocolo:", error)
             setError("Erro ao gerar protocolo automático")
@@ -94,6 +111,8 @@ function NewRequisitionForm() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         setError("")
+
+        console.log("🚀 Starting form submission...")
 
         if (!protocol) {
             setError("Protocolo é obrigatório")
@@ -120,6 +139,19 @@ function NewRequisitionForm() {
             return
         }
 
+        // Verificar se há imagens não enviadas
+        const pendingImages = images.filter((img) => !img.uploaded && !img.error && img.file)
+        const uploadingImages = images.filter((img) => img.uploading)
+
+        console.log(`📊 Image check - Pending: ${pendingImages.length}, Uploading: ${uploadingImages.length}`)
+
+        if (pendingImages.length > 0 || uploadingImages.length > 0) {
+            setError(
+                `Aguarde o upload de todas as imagens ser concluído. ${pendingImages.length} pendente(s), ${uploadingImages.length} enviando...`,
+            )
+            return
+        }
+
         // Filtrar telefones vazios
         const filteredPhones = phones.filter((phone) => phone.trim() !== "")
 
@@ -131,8 +163,22 @@ function NewRequisitionForm() {
         try {
             setLoading(true)
 
-            // Primeiro criar a requisição
-            const requisitionId = await RequisitionService.createRequisition({
+            // Preparar dados das imagens (apenas as que foram enviadas com sucesso)
+            const imageData = images
+                .filter((img) => img.uploaded && img.url)
+                .map((img) => ({
+                    id: img.id,
+                    name: img.name,
+                    size: img.size,
+                    url: img.url!,
+                    uploadedAt: new Date(),
+                    oneDriveId: img.oneDriveId || img.id, // Usar o ID do OneDrive
+                }))
+
+            console.log(`💾 Saving requisition with ${imageData.length} uploaded images`)
+
+            // Criar a requisição com as URLs das imagens já carregadas no OneDrive
+            await RequisitionService.createRequisition({
                 protocol,
                 patientName,
                 procedures,
@@ -141,31 +187,18 @@ function NewRequisitionForm() {
                 receivedDate,
                 phones: filteredPhones,
                 status,
+                images: imageData.length > 0 ? imageData : undefined,
                 createdBy: user?.uid || "",
             })
 
-            // Depois fazer upload das imagens se houver
-            if (images.length > 0) {
-                const imageFiles = images.map((img) => img.file)
-                const imageUrls = await StorageService.uploadMultipleImages(imageFiles, requisitionId)
-
-                // Atualizar a requisição com as URLs das imagens
-                const imageData = imageUrls.map((url, index) => ({
-                    id: images[index].id,
-                    name: images[index].name,
-                    size: images[index].size,
-                    url,
-                    uploadedAt: new Date(),
-                }))
-
-                await RequisitionService.updateRequisition(requisitionId, {
-                    images: imageData,
-                })
-            }
-
             // Limpar previews das imagens
-            images.forEach((img) => URL.revokeObjectURL(img.preview))
+            images.forEach((img) => {
+                if (img.preview) {
+                    URL.revokeObjectURL(img.preview)
+                }
+            })
 
+            console.log("✅ Requisition saved successfully")
             router.push("/requisitions")
         } catch (error) {
             console.error("Erro ao criar requisição:", error)
@@ -202,7 +235,7 @@ function NewRequisitionForm() {
                             <CardDescription>Preencha os dados para cadastrar uma nova requisição de procedimento</CardDescription>
                         </CardHeader>
                         <form onSubmit={handleSubmit}>
-                            <CardContent className="space-y-6">
+                            <CardContent className="space-y-6 mb-6">
                                 {error && (
                                     <Alert variant="destructive">
                                         <AlertDescription>{error}</AlertDescription>
@@ -235,6 +268,7 @@ function NewRequisitionForm() {
                                                 {isGeneratingProtocol ? "Gerando..." : "Gerar"}
                                             </Button>
                                         </div>
+                                        {protocol && <p className="text-xs text-green-600">✅ Protocolo definido: {protocol}</p>}
                                     </div>
 
                                     <div className="space-y-2">
@@ -366,7 +400,13 @@ function NewRequisitionForm() {
 
                                     {/* Upload de Imagens */}
                                     <div className="space-y-4 md:col-span-2">
-                                        <ImageUpload images={images} onChange={setImages} maxImages={10} maxSizePerImage={5} />
+                                        <ImageUpload
+                                            images={images}
+                                            onChange={setImages}
+                                            protocol={protocol}
+                                            maxImages={10}
+                                            maxSizePerImage={10}
+                                        />
                                     </div>
                                 </div>
                             </CardContent>

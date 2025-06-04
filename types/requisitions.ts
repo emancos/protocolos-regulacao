@@ -27,6 +27,7 @@ export interface ImageFile {
     size: number
     url: string
     uploadedAt: Date
+    oneDriveId?: string // ID do arquivo no OneDrive para possível exclusão
 }
 
 export interface Requisition {
