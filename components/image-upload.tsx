@@ -292,7 +292,8 @@ export function ImageUpload({ images, onChange, protocol, maxImages = 10, maxSiz
                     )}
                     {protocol && (
                         <span className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded">
-                            📁 {process.env.ONEDRIVE_BASE_FOLDER || "Protocolos"}/{protocol}
+                            📁 {process.env.NEXT_PUBLIC_ONEDRIVE_BASE_FOLDER || "Protocolos"}/{protocol}
+
                         </span>
                     )}
                 </div>
