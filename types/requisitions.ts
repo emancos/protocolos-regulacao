@@ -45,6 +45,10 @@ export interface Requisition {
     createdAt: Date
     updatedAt: Date
 
+    // Campos obrigatórios
+    healthUnitId: string
+    healthAgentId?: string // Opcional
+
     // Campos de agendamento (opcionais)
     scheduledDate?: Date
     scheduledLocation?: string

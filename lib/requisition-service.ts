@@ -26,6 +26,8 @@ interface CreateRequisitionData {
     status: Status
     images?: ImageFile[]
     createdBy: string
+    healthUnitId: string
+    healthAgentId?: string
 }
 
 interface UpdateRequisitionData {
@@ -41,6 +43,8 @@ interface UpdateRequisitionData {
     scheduledLocation?: string
     regulationType?: RegulationType
     scheduledBy?: string
+    healthUnitId?: string
+    healthAgentId?: string
 }
 
 export class RequisitionService {
@@ -69,6 +73,57 @@ export class RequisitionService {
         }
     }
 
+    static async checkDuplicateProcedures(
+        susCard: string,
+        procedures: ProcedureItem[],
+    ): Promise<{
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        [x: string]: any
+        hasDuplicate: boolean
+        duplicates: Array<{ procedure: string; protocol: string; status: string }>
+    }> {
+        try {
+            // Buscar todas as requisições para o cartão SUS que não estão agendadas
+            const q = query(
+                collection(db, "requisitions"),
+                where("susCard", "==", susCard),
+                where("status", "in", ["PENDENTE", "SIS_PENDENTE"]),
+            )
+
+            const querySnapshot = await getDocs(q)
+            const duplicates: Array<{ procedure: string; protocol: string; status: string }> = []
+
+            // Verificar cada procedimento solicitado
+            for (const procedure of procedures) {
+                for (const doc of querySnapshot.docs) {
+                    const data = doc.data()
+                    const existingProcedures = data.procedures as ProcedureItem[]
+
+                    // Verificar se algum procedimento existente é igual ao solicitado
+                    const hasSameProcedure = existingProcedures.some(
+                        (existing) => existing.name.toLowerCase() === procedure.name.toLowerCase(),
+                    )
+
+                    if (hasSameProcedure) {
+                        duplicates.push({
+                            procedure: procedure.name,
+                            protocol: data.protocol,
+                            status: data.status,
+                        })
+                    }
+                }
+            }
+
+            return {
+                hasDuplicate: duplicates.length > 0,
+                duplicates,
+            }
+        } catch (error) {
+            console.error("Erro ao verificar procedimentos duplicados:", error)
+            throw error
+        }
+    }
+
     static async getRequisitions(): Promise<Requisition[]> {
         try {
             const q = query(collection(db, "requisitions"), orderBy("createdAt", "desc"))
@@ -90,6 +145,8 @@ export class RequisitionService {
                     createdBy: data.createdBy,
                     createdAt: data.createdAt?.toDate() || new Date(),
                     updatedAt: data.updatedAt?.toDate() || new Date(),
+                    healthUnitId: data.healthUnitId,
+                    healthAgentId: data.healthAgentId,
                     scheduledDate: data.scheduledDate?.toDate(),
                     scheduledLocation: data.scheduledLocation,
                     regulationType: data.regulationType,
@@ -131,6 +188,8 @@ export class RequisitionService {
                 createdBy: data.createdBy,
                 createdAt: data.createdAt?.toDate() || new Date(),
                 updatedAt: data.updatedAt?.toDate() || new Date(),
+                healthUnitId: data.healthUnitId,
+                healthAgentId: data.healthAgentId,
                 scheduledDate: data.scheduledDate?.toDate(),
                 scheduledLocation: data.scheduledLocation,
                 regulationType: data.regulationType,
@@ -164,6 +223,8 @@ export class RequisitionService {
             if (data.scheduledLocation !== undefined) updateData.scheduledLocation = data.scheduledLocation
             if (data.regulationType !== undefined) updateData.regulationType = data.regulationType
             if (data.scheduledBy !== undefined) updateData.scheduledBy = data.scheduledBy
+            if (data.healthUnitId !== undefined) updateData.healthUnitId = data.healthUnitId
+            if (data.healthAgentId !== undefined) updateData.healthAgentId = data.healthAgentId
 
             // Converter datas para Timestamp
             if (data.receivedDate) {
@@ -228,6 +289,8 @@ export class RequisitionService {
                     createdBy: data.createdBy,
                     createdAt: data.createdAt?.toDate() || new Date(),
                     updatedAt: data.updatedAt?.toDate() || new Date(),
+                    healthUnitId: data.healthUnitId || "",
+                    healthAgentId: data.healthAgentId,
                     scheduledDate: data.scheduledDate?.toDate(),
                     scheduledLocation: data.scheduledLocation,
                     regulationType: data.regulationType,
@@ -271,6 +334,8 @@ export class RequisitionService {
                     createdBy: data.createdBy,
                     createdAt: data.createdAt?.toDate() || new Date(),
                     updatedAt: data.updatedAt?.toDate() || new Date(),
+                    healthUnitId: data.healthUnitId || "",
+                    healthAgentId: data.healthAgentId,
                     scheduledDate: data.scheduledDate?.toDate(),
                     scheduledLocation: data.scheduledLocation,
                     regulationType: data.regulationType,
