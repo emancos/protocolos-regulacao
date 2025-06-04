@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { db } from "./firebase"
 import {
     collection,
@@ -149,6 +148,7 @@ export class RequisitionService {
             const docRef = doc(db, "requisitions", id)
 
             // Criar objeto de atualização com tipos corretos
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const updateData: Record<string, any> = {
                 updatedAt: serverTimestamp(),
             }
@@ -251,11 +251,11 @@ export class RequisitionService {
 
     static async getScheduledRequisitions(): Promise<Requisition[]> {
         try {
-            // Buscar apenas requisições agendadas
-            const q = query(collection(db, "requisitions"), where("status", "==", "AGENDADO"), orderBy("createdAt", "desc"))
+            // Buscar todas as requisições e filtrar no cliente para evitar índice composto
+            const q = query(collection(db, "requisitions"), orderBy("createdAt", "desc"))
             const querySnapshot = await getDocs(q)
 
-            const scheduledRequisitions = querySnapshot.docs.map((doc) => {
+            const allRequisitions = querySnapshot.docs.map((doc) => {
                 const data = doc.data()
                 return {
                     id: doc.id,
@@ -278,6 +278,9 @@ export class RequisitionService {
                     scheduledAt: data.scheduledAt?.toDate(),
                 }
             })
+
+            // Filtrar no cliente para requisições agendadas
+            const scheduledRequisitions = allRequisitions.filter((req) => req.status === "AGENDADO")
 
             // Ordenar por data agendada (mais próximas primeiro)
             return scheduledRequisitions.sort((a, b) => {
