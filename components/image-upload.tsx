@@ -291,7 +291,7 @@ export function ImageUpload({ images, onChange, protocol, maxImages = 10, maxSiz
                         </span>
                     )}
                     {protocol && (
-                        <span className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded">
+                        <span className="text-xs text-white-600 bg-blue-800 px-2 py-1 font-semibold rounded">
                             📁 {process.env.NEXT_PUBLIC_ONEDRIVE_BASE_FOLDER || "Protocolos"}/{protocol}
 
                         </span>
@@ -364,7 +364,7 @@ export function ImageUpload({ images, onChange, protocol, maxImages = 10, maxSiz
                                 </p>
                                 <p className="text-sm text-gray-500 mt-1">
                                     Máximo {maxImages} imagens, {maxSizePerImage}MB cada
-                                    {protocol && ` - Salvo em: ${process.env.ONEDRIVE_BASE_FOLDER || "Protocolos"}/${protocol}`}
+                                    {protocol && ` - Salvo em: ${process.env.NEXT_PUBLIC_ONEDRIVE_BASE_FOLDER || "Protocolos"}/${protocol}`}
                                     {!protocol && " - Defina o protocolo primeiro"}
                                 </p>
                             </div>

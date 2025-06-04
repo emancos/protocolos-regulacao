@@ -289,7 +289,7 @@ function NewRequisitionForm() {
                             </CardDescription>
                         </CardHeader>
                         <form onSubmit={handleSubmit}>
-                            <CardContent className="space-y-6">
+                            <CardContent className="space-y-6 mb-6">
                                 {error && (
                                     <Alert variant="destructive">
                                         <AlertTriangle className="h-4 w-4" />
