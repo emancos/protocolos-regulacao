@@ -18,10 +18,11 @@ import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
-import { CalendarIcon, Plus, Trash2, ArrowLeft } from "lucide-react"
+import { CalendarIcon, Plus, Trash2, ArrowLeft, AlertTriangle } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { RequisitionService } from "@/lib/requisition-service"
 import { Priority, Status, PRIORITY_LABELS } from "@/types/requisitions"
+import { HEALTH_UNITS, HEALTH_AGENTS, type HealthUnit, type HealthAgent } from "@/types/health-units"
 import Link from "next/link"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { ProcedureSelector } from "@/components/procedure-selector"
@@ -60,23 +61,83 @@ function NewRequisitionForm() {
     const [receivedDate, setReceivedDate] = useState<Date>(new Date())
     const [phones, setPhones] = useState<string[]>([""])
     const [status, setStatus] = useState<Status>(Status.PENDENTE)
+    const [healthUnitId, setHealthUnitId] = useState("")
+    const [healthAgentId, setHealthAgentId] = useState("")
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState("")
-    const [isGeneratingProtocol, setIsGeneratingProtocol] = useState(false)
+    const [duplicateWarning, setDuplicateWarning] = useState<string>("")
     const [procedures, setProcedures] = useState<ProcedureItem[]>([])
     const [images, setImages] = useState<ImageFile[]>([])
 
-    // Debug: Log do estado das imagens
-    useEffect(() => {
-        const uploadedCount = images.filter((img) => img.uploaded).length
-        const uploadingCount = images.filter((img) => img.uploading).length
-        const errorCount = images.filter((img) => img.error).length
-        const pendingCount = images.filter((img) => img.file && !img.uploaded && !img.uploading && !img.error).length
+    // Estados derivados
+    const [availableAgents, setAvailableAgents] = useState<HealthAgent[]>([])
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const [selectedHealthUnit, setSelectedHealthUnit] = useState<HealthUnit | null>(null)
 
-        console.log(
-            `📊 Images status - Total: ${images.length}, Uploaded: ${uploadedCount}, Uploading: ${uploadingCount}, Pending: ${pendingCount}, Errors: ${errorCount}`,
-        )
-    }, [images])
+    // Gerar protocolo ao carregar a página
+    useEffect(() => {
+        const generateInitialProtocol = async () => {
+            try {
+                const newProtocol = await RequisitionService.generateProtocol()
+                setProtocol(newProtocol)
+                console.log(`📋 Generated initial protocol: ${newProtocol}`)
+            } catch (error) {
+                console.error("Erro ao gerar protocolo inicial:", error)
+                setError("Erro ao gerar protocolo automático")
+            }
+        }
+
+        generateInitialProtocol()
+    }, [])
+
+    // Substituir o useEffect que gerenciava PSFs:
+    useEffect(() => {
+        if (healthUnitId) {
+            const unit = HEALTH_UNITS.find((u) => u.id === healthUnitId)
+            setSelectedHealthUnit(unit || null)
+
+            // Carregar agentes diretamente da unidade de saúde
+            const agents = HEALTH_AGENTS.filter((a) => a.healthUnitId === healthUnitId)
+            setAvailableAgents(agents)
+            console.log(`Found ${agents.length} agents for unit ${unit?.name}`)
+
+            // Se não houver agentes, limpar o campo de agente selecionado
+            if (agents.length === 0) {
+                setHealthAgentId("")
+            }
+        } else {
+            setSelectedHealthUnit(null)
+            setAvailableAgents([])
+            setHealthAgentId("")
+        }
+    }, [healthUnitId])
+
+    // Verificar procedimentos duplicados quando cartão SUS ou procedimentos mudam
+    useEffect(() => {
+        const checkDuplicates = async () => {
+            if (susCard && procedures.length > 0) {
+                try {
+                    const result = await RequisitionService.checkDuplicateProcedures(susCard, procedures)
+                    if (result.hasDuplicate) {
+                        const duplicateList = result.map((d: { procedure: string; protocol: string; status: string }) => `• ${d.procedure} (Protocolo: ${d.protocol}, Status: ${d.status})`)
+                            .join("\n")
+                        setDuplicateWarning(
+                            `⚠️ ATENÇÃO: Este cartão SUS já possui solicitações pendentes para os seguintes procedimentos:\n\n${duplicateList}\n\nO paciente deve aguardar o agendamento das solicitações anteriores.`,
+                        )
+                    } else {
+                        setDuplicateWarning("")
+                    }
+                } catch (error) {
+                    console.error("Erro ao verificar duplicatas:", error)
+                }
+            } else {
+                setDuplicateWarning("")
+            }
+        }
+
+        const timeoutId = setTimeout(checkDuplicates, 500) // Debounce
+        return () => clearTimeout(timeoutId)
+    }, [susCard, procedures])
 
     const addPhoneField = () => {
         setPhones([...phones, ""])
@@ -94,18 +155,30 @@ function NewRequisitionForm() {
         setPhones(newPhones)
     }
 
-    const generateProtocol = async () => {
-        try {
-            setIsGeneratingProtocol(true)
-            const newProtocol = await RequisitionService.generateProtocol()
-            setProtocol(newProtocol)
-            console.log(`📋 Generated protocol: ${newProtocol}`)
-        } catch (error) {
-            console.error("Erro ao gerar protocolo:", error)
-            setError("Erro ao gerar protocolo automático")
-        } finally {
-            setIsGeneratingProtocol(false)
+    // Simplificar a validação:
+    const validateForm = (): string | null => {
+        if (!protocol) return "Protocolo é obrigatório"
+        if (!patientName.trim()) return "Nome do paciente é obrigatório"
+        if (!susCard.trim()) return "Cartão SUS é obrigatório"
+        if (!healthUnitId) return "Unidade de Saúde é obrigatória"
+
+        // Agente é obrigatório se houver agentes disponíveis
+        if (availableAgents.length > 0 && !healthAgentId) {
+            return "Agente de Saúde é obrigatório"
         }
+
+        if (procedures.length === 0) return "Pelo menos um procedimento é obrigatório"
+
+        // Filtrar telefones vazios
+        const validPhones = phones.filter((phone) => phone.trim() !== "")
+        if (validPhones.length === 0) return "Pelo menos um telefone é obrigatório"
+
+        // Verificar se há duplicatas
+        if (duplicateWarning) {
+            return "Existem procedimentos duplicados para este cartão SUS. Verifique o aviso acima."
+        }
+
+        return null
     }
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -114,28 +187,10 @@ function NewRequisitionForm() {
 
         console.log("🚀 Starting form submission...")
 
-        if (!protocol) {
-            setError("Protocolo é obrigatório")
-            return
-        }
-
-        if (!patientName) {
-            setError("Nome do paciente é obrigatório")
-            return
-        }
-
-        if (procedures.length === 0) {
-            setError("Pelo menos um procedimento é obrigatório")
-            return
-        }
-
-        if (!susCard) {
-            setError("Cartão SUS é obrigatório")
-            return
-        }
-
-        if (!phones[0]) {
-            setError("Pelo menos um telefone é obrigatório")
+        // Validar formulário
+        const validationError = validateForm()
+        if (validationError) {
+            setError(validationError)
             return
         }
 
@@ -154,11 +209,6 @@ function NewRequisitionForm() {
 
         // Filtrar telefones vazios
         const filteredPhones = phones.filter((phone) => phone.trim() !== "")
-
-        if (filteredPhones.length === 0) {
-            setError("Pelo menos um telefone é obrigatório")
-            return
-        }
 
         try {
             setLoading(true)
@@ -180,13 +230,15 @@ function NewRequisitionForm() {
             // Criar a requisição com as URLs das imagens já carregadas no OneDrive
             await RequisitionService.createRequisition({
                 protocol,
-                patientName,
+                patientName: patientName.trim(),
                 procedures,
                 priority,
-                susCard,
+                susCard: susCard.trim(),
                 receivedDate,
                 phones: filteredPhones,
                 status,
+                healthUnitId,
+                healthAgentId: healthAgentId || undefined,
                 images: imageData.length > 0 ? imageData : undefined,
                 createdBy: user?.uid || "",
             })
@@ -232,13 +284,23 @@ function NewRequisitionForm() {
                     <Card className="w-full">
                         <CardHeader>
                             <CardTitle>Cadastrar Nova Requisição</CardTitle>
-                            <CardDescription>Preencha os dados para cadastrar uma nova requisição de procedimento</CardDescription>
+                            <CardDescription>
+                                Preencha todos os dados obrigatórios para cadastrar uma nova requisição de procedimento
+                            </CardDescription>
                         </CardHeader>
                         <form onSubmit={handleSubmit}>
-                            <CardContent className="space-y-6 mb-6">
+                            <CardContent className="space-y-6">
                                 {error && (
                                     <Alert variant="destructive">
+                                        <AlertTriangle className="h-4 w-4" />
                                         <AlertDescription>{error}</AlertDescription>
+                                    </Alert>
+                                )}
+
+                                {duplicateWarning && (
+                                    <Alert variant="destructive">
+                                        <AlertTriangle className="h-4 w-4" />
+                                        <AlertDescription className="whitespace-pre-line">{duplicateWarning}</AlertDescription>
                                     </Alert>
                                 )}
 
@@ -251,24 +313,14 @@ function NewRequisitionForm() {
 
                                     <div className="space-y-2">
                                         <Label htmlFor="protocol">Protocolo *</Label>
-                                        <div className="flex space-x-2">
-                                            <Input
-                                                id="protocol"
-                                                value={protocol}
-                                                onChange={(e) => setProtocol(e.target.value)}
-                                                placeholder="Número do protocolo"
-                                                required
-                                            />
-                                            <Button
-                                                type="button"
-                                                onClick={generateProtocol}
-                                                disabled={isGeneratingProtocol}
-                                                variant="outline"
-                                            >
-                                                {isGeneratingProtocol ? "Gerando..." : "Gerar"}
-                                            </Button>
-                                        </div>
-                                        {protocol && <p className="text-xs text-green-600">✅ Protocolo definido: {protocol}</p>}
+                                        <Input
+                                            id="protocol"
+                                            value={protocol}
+                                            placeholder="Protocolo será gerado automaticamente"
+                                            disabled
+                                            className="bg-gray-100 dark:bg-gray-800"
+                                        />
+                                        {protocol && <p className="text-xs text-green-600">✅ Protocolo gerado: {protocol}</p>}
                                     </div>
 
                                     <div className="space-y-2">
@@ -350,6 +402,47 @@ function NewRequisitionForm() {
                                         </Select>
                                     </div>
 
+                                    {/* Unidade de Saúde e PSF */}
+                                    <div className="space-y-4 md:col-span-2">
+                                        <h3 className="text-lg font-medium">Unidade de Saúde</h3>
+                                        <Separator />
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <Label htmlFor="healthUnit">Unidade de Saúde *</Label>
+                                        <Select value={healthUnitId} onValueChange={setHealthUnitId}>
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Selecione a unidade de saúde" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {HEALTH_UNITS.map((unit) => (
+                                                    <SelectItem key={unit.id} value={unit.id}>
+                                                        {unit.name} ({unit.type})
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+
+                                    {/* Mostrar Agente de Saúde diretamente dependente da Unidade de Saúde */}
+                                    {healthUnitId && availableAgents.length > 0 && (
+                                        <div className="space-y-2">
+                                            <Label htmlFor="healthAgent">Agente de Saúde *</Label>
+                                            <Select value={healthAgentId} onValueChange={setHealthAgentId}>
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Selecione o agente de saúde" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {availableAgents.map((agent) => (
+                                                        <SelectItem key={agent.id} value={agent.id}>
+                                                            {agent.name}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                    )}
+
                                     {/* Procedimentos */}
                                     <div className="space-y-4 md:col-span-2">
                                         <ProcedureSelector procedures={procedures} onChange={setProcedures} />
@@ -414,7 +507,7 @@ function NewRequisitionForm() {
                                 <Button variant="outline" asChild>
                                     <Link href="/requisitions">Cancelar</Link>
                                 </Button>
-                                <Button type="submit" disabled={loading}>
+                                <Button type="submit" disabled={loading || !!duplicateWarning}>
                                     {loading ? "Salvando..." : "Salvar Requisição"}
                                 </Button>
                             </CardFooter>
