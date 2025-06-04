@@ -2,33 +2,55 @@
 
 import type React from "react"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Upload, X, FileImage } from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Upload, X, FileImage, CheckCircle, AlertCircle, RefreshCw } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface ImageFile {
     id: string
-    file: File
-    preview: string
+    file?: File
+    preview?: string
     name: string
     size: number
+    url?: string
+    uploaded?: boolean
+    uploading?: boolean
+    error?: string
 }
 
 interface ImageUploadProps {
     images: ImageFile[]
     onChange: (images: ImageFile[]) => void
+    protocol?: string
     maxImages?: number
     maxSizePerImage?: number // em MB
 }
 
-export function ImageUpload({ images, onChange, maxImages = 10, maxSizePerImage = 5 }: ImageUploadProps) {
+export function ImageUpload({ images, onChange, protocol, maxImages = 10, maxSizePerImage = 10 }: ImageUploadProps) {
     const [dragActive, setDragActive] = useState(false)
     const [error, setError] = useState("")
+    const [uploading, setUploading] = useState(false)
+    const [lastProtocol, setLastProtocol] = useState<string | undefined>(undefined)
     const fileInputRef = useRef<HTMLInputElement>(null)
 
-    const handleFiles = (files: FileList | null) => {
+    // Upload automático apenas quando protocolo muda (não quando é definido pela primeira vez)
+    useEffect(() => {
+        if (protocol && protocol !== lastProtocol && lastProtocol !== undefined) {
+            const pendingImages = images.filter((img) => img.file && !img.uploaded && !img.uploading && !img.error)
+            if (pendingImages.length > 0) {
+                console.log(
+                    `🔄 Protocol changed from "${lastProtocol}" to "${protocol}", auto-uploading ${pendingImages.length} pending images`,
+                )
+                uploadImages(pendingImages, images)
+            }
+        }
+        setLastProtocol(protocol)
+    }, [protocol])
+
+    const handleFiles = async (files: FileList | null) => {
         if (!files) return
 
         setError("")
@@ -61,6 +83,8 @@ export function ImageUpload({ images, onChange, maxImages = 10, maxSizePerImage 
                 preview,
                 name: file.name,
                 size: file.size,
+                uploaded: false,
+                uploading: false,
             }
 
             newImages.push(imageFile)
@@ -73,15 +97,156 @@ export function ImageUpload({ images, onChange, maxImages = 10, maxSizePerImage 
             return
         }
 
-        onChange([...images, ...newImages])
+        const updatedImages = [...images, ...newImages]
+        onChange(updatedImages)
+
+        console.log(`📁 Added ${newImages.length} new images. Protocol: ${protocol || "not set"}`)
+
+        // NÃO fazer upload automático aqui - apenas quando o usuário clicar no botão manual
+        // ou quando o protocolo for definido pela primeira vez
+        if (protocol && newImages.length > 0) {
+            console.log(`🚀 Protocol is set (${protocol}), starting auto-upload for ${newImages.length} new images`)
+            await uploadImages(newImages, updatedImages)
+        } else if (!protocol) {
+            console.log("⏳ Protocol not set, upload will happen when protocol is available")
+        }
+    }
+
+    const uploadImages = async (imagesToUpload: ImageFile[], allImages: ImageFile[]) => {
+        if (!protocol) {
+            setError("Protocolo é necessário para fazer upload")
+            return
+        }
+
+        // Verificar se alguma das imagens já está sendo enviada
+        const alreadyUploading = imagesToUpload.some((img) => img.uploading)
+        if (alreadyUploading) {
+            console.log("⚠️ Some images are already uploading, skipping duplicate upload")
+            return
+        }
+
+        console.log(`📤 Starting upload of ${imagesToUpload.length} images for protocol: ${protocol}`)
+        setUploading(true)
+
+        try {
+            // Marcar imagens como "uploading"
+            const updatedImages = allImages.map((img) =>
+                imagesToUpload.some((upload) => upload.id === img.id) ? { ...img, uploading: true, error: undefined } : img,
+            )
+            onChange(updatedImages)
+
+            const formData = new FormData()
+            imagesToUpload.forEach((img) => {
+                if (img.file) {
+                    formData.append("files", img.file)
+                    console.log(`📎 Added file to form data: ${img.name}`)
+                }
+            })
+            formData.append("protocol", protocol)
+
+            console.log(`📤 Sending ${imagesToUpload.length} file(s) to /api/upload...`)
+
+            const response = await fetch("/api/upload", {
+                method: "POST",
+                body: formData,
+            })
+
+            const responseText = await response.text()
+            console.log("📥 Upload response status:", response.status)
+            console.log("📥 Upload response body:", responseText.substring(0, 500))
+
+            if (!response.ok) {
+                let errorMessage = "Erro no upload"
+                try {
+                    const errorData = JSON.parse(responseText)
+                    errorMessage = errorData.error || errorMessage
+                } catch {
+                    errorMessage = responseText || errorMessage
+                }
+                throw new Error(errorMessage)
+            }
+
+            const result = JSON.parse(responseText)
+
+            if (!result.success || !result.files) {
+                throw new Error("Resposta inválida do servidor")
+            }
+
+            console.log("✅ Upload successful, received files:", result.files)
+
+            // Atualizar imagens com URLs do OneDrive
+            const finalImages = allImages.map((img) => {
+                const uploadedFile = result.files.find(
+                    (f: { name: string; url: string; id: string }) =>
+                        f.name.includes(img.name.replace(/\.[^/.]+$/, "")) || // Remove extensão para comparação
+                        f.name.includes(img.name), // Ou nome completo
+                )
+
+                if (uploadedFile && imagesToUpload.some((upload) => upload.id === img.id)) {
+                    console.log(`✅ Mapping uploaded file: ${uploadedFile.name} -> ${img.name}`)
+
+                    // Limpar preview local
+                    if (img.preview) {
+                        URL.revokeObjectURL(img.preview)
+                    }
+
+                    return {
+                        ...img,
+                        url: uploadedFile.url,
+                        uploaded: true,
+                        uploading: false,
+                        preview: undefined,
+                        file: undefined,
+                        oneDriveId: uploadedFile.oneDriveId,
+                    }
+                }
+                return img
+            })
+
+            onChange(finalImages)
+            setError("") // Limpar erro em caso de sucesso
+
+            const uploadedCount = finalImages.filter((img) => img.uploaded).length
+            console.log(`✅ Upload completed. Total uploaded images: ${uploadedCount}`)
+        } catch (error) {
+            console.error("❌ Upload error:", error)
+
+            // Marcar imagens com erro
+            const errorImages = allImages.map((img) =>
+                imagesToUpload.some((upload) => upload.id === img.id)
+                    ? { ...img, uploading: false, error: error instanceof Error ? error.message : "Erro no upload" }
+                    : img,
+            )
+            onChange(errorImages)
+
+            setError(error instanceof Error ? error.message : "Erro no upload das imagens")
+        } finally {
+            setUploading(false)
+        }
     }
 
     const removeImage = (id: string) => {
         const imageToRemove = images.find((img) => img.id === id)
-        if (imageToRemove) {
+        if (imageToRemove?.preview) {
             URL.revokeObjectURL(imageToRemove.preview)
         }
         onChange(images.filter((img) => img.id !== id))
+    }
+
+    const retryUpload = async (imageId: string) => {
+        const imageToRetry = images.find((img) => img.id === imageId)
+        if (imageToRetry && imageToRetry.file) {
+            console.log(`🔄 Retrying upload for: ${imageToRetry.name}`)
+            await uploadImages([imageToRetry], images)
+        }
+    }
+
+    const uploadAllPending = async () => {
+        const pendingImages = images.filter((img) => img.file && !img.uploaded && !img.uploading && !img.error)
+        if (pendingImages.length > 0 && protocol) {
+            console.log(`🔄 Manual upload of ${pendingImages.length} pending images`)
+            await uploadImages(pendingImages, images)
+        }
     }
 
     const handleDrag = (e: React.DragEvent) => {
@@ -109,16 +274,59 @@ export function ImageUpload({ images, onChange, maxImages = 10, maxSizePerImage 
         return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
     }
 
+    // Estatísticas das imagens
+    const uploadedCount = images.filter((img) => img.uploaded).length
+    const uploadingCount = images.filter((img) => img.uploading).length
+    const errorCount = images.filter((img) => img.error).length
+    const pendingCount = images.filter((img) => img.file && !img.uploaded && !img.uploading && !img.error).length
+
     return (
         <div className="space-y-4">
             <div className="flex items-center justify-between">
                 <h3 className="text-lg font-medium">Anexar Imagens</h3>
-                {images.length > 0 && (
-                    <span className="text-sm text-gray-500">
-                        {images.length}/{maxImages} imagem(ns)
-                    </span>
-                )}
+                <div className="flex items-center space-x-2">
+                    {images.length > 0 && (
+                        <span className="text-sm text-gray-500">
+                            {images.length}/{maxImages} imagem(ns)
+                        </span>
+                    )}
+                    {protocol && (
+                        <span className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded">
+                            📁 {process.env.ONEDRIVE_BASE_FOLDER || "Protocolos"}/{protocol}
+                        </span>
+                    )}
+                </div>
             </div>
+
+            {/* Status das imagens */}
+            {images.length > 0 && (
+                <div className="flex items-center space-x-4 text-sm">
+                    {uploadedCount > 0 && <span className="text-green-600">✅ {uploadedCount} enviada(s)</span>}
+                    {uploadingCount > 0 && <span className="text-blue-600">🔄 {uploadingCount} enviando...</span>}
+                    {pendingCount > 0 && <span className="text-yellow-600">⏳ {pendingCount} pendente(s)</span>}
+                    {errorCount > 0 && <span className="text-red-600">❌ {errorCount} com erro</span>}
+                </div>
+            )}
+
+            {/* Botão de upload manual para imagens pendentes */}
+            {pendingCount > 0 && protocol && (
+                <Alert>
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription className="flex items-center justify-between">
+                        <span>Há {pendingCount} imagem(ns) aguardando upload</span>
+                        <Button onClick={uploadAllPending} disabled={uploading} size="sm">
+                            {uploading ? (
+                                <>
+                                    <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
+                                    Enviando...
+                                </>
+                            ) : (
+                                "Enviar Agora"
+                            )}
+                        </Button>
+                    </AlertDescription>
+                </Alert>
+            )}
 
             {/* Área de upload */}
             <Card>
@@ -127,7 +335,7 @@ export function ImageUpload({ images, onChange, maxImages = 10, maxSizePerImage 
                         className={cn(
                             "border-2 border-dashed rounded-lg p-6 text-center transition-colors",
                             dragActive ? "border-blue-500 bg-blue-50 dark:bg-blue-950" : "border-gray-300 dark:border-gray-600",
-                            images.length >= maxImages && "opacity-50 pointer-events-none",
+                            (images.length >= maxImages || uploading) && "opacity-50 pointer-events-none",
                         )}
                         onDragEnter={handleDrag}
                         onDragLeave={handleDrag}
@@ -141,7 +349,7 @@ export function ImageUpload({ images, onChange, maxImages = 10, maxSizePerImage 
                             accept="image/*"
                             onChange={(e) => handleFiles(e.target.files)}
                             className="hidden"
-                            disabled={images.length >= maxImages}
+                            disabled={images.length >= maxImages || uploading}
                         />
 
                         <div className="space-y-4">
@@ -150,9 +358,13 @@ export function ImageUpload({ images, onChange, maxImages = 10, maxSizePerImage 
                             </div>
 
                             <div>
-                                <p className="text-lg font-medium">Arraste imagens aqui ou clique para selecionar</p>
+                                <p className="text-lg font-medium">
+                                    {uploading ? "Fazendo upload..." : "Arraste imagens aqui ou clique para selecionar"}
+                                </p>
                                 <p className="text-sm text-gray-500 mt-1">
                                     Máximo {maxImages} imagens, {maxSizePerImage}MB cada
+                                    {protocol && ` - Salvo em: ${process.env.ONEDRIVE_BASE_FOLDER || "Protocolos"}/${protocol}`}
+                                    {!protocol && " - Defina o protocolo primeiro"}
                                 </p>
                             </div>
 
@@ -160,15 +372,20 @@ export function ImageUpload({ images, onChange, maxImages = 10, maxSizePerImage 
                                 type="button"
                                 variant="outline"
                                 onClick={() => fileInputRef.current?.click()}
-                                disabled={images.length >= maxImages}
+                                disabled={images.length >= maxImages || uploading}
                             >
                                 <FileImage className="w-4 h-4 mr-2" />
-                                Selecionar Imagens
+                                {uploading ? "Fazendo upload..." : "Selecionar Imagens"}
                             </Button>
                         </div>
                     </div>
 
-                    {error && <p className="text-sm text-red-500 mt-2">{error}</p>}
+                    {error && (
+                        <Alert variant="destructive" className="mt-4">
+                            <AlertCircle className="h-4 w-4" />
+                            <AlertDescription>{error}</AlertDescription>
+                        </Alert>
+                    )}
                 </CardContent>
             </Card>
 
@@ -184,10 +401,29 @@ export function ImageUpload({ images, onChange, maxImages = 10, maxSizePerImage 
                                 <div key={image.id} className="relative group">
                                     <div className="aspect-square rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800">
                                         <img
-                                            src={image.preview || "/placeholder.svg"}
+                                            src={image.url || image.preview || "/placeholder.svg"}
                                             alt={image.name}
                                             className="w-full h-full object-cover transition-transform group-hover:scale-105"
                                         />
+
+                                        {/* Status overlay */}
+                                        <div className="absolute inset-0 flex items-center justify-center">
+                                            {image.uploading && (
+                                                <div className="bg-black bg-opacity-50 rounded-full p-2">
+                                                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white"></div>
+                                                </div>
+                                            )}
+                                            {image.uploaded && (
+                                                <div className="bg-green-500 bg-opacity-80 rounded-full p-1 absolute top-2 right-2">
+                                                    <CheckCircle className="h-4 w-4 text-white" />
+                                                </div>
+                                            )}
+                                            {image.error && (
+                                                <div className="bg-red-500 bg-opacity-80 rounded-full p-1 absolute top-2 right-2">
+                                                    <AlertCircle className="h-4 w-4 text-white" />
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
 
                                     {/* Botão de remover */}
@@ -197,6 +433,7 @@ export function ImageUpload({ images, onChange, maxImages = 10, maxSizePerImage 
                                         size="icon"
                                         className="absolute -top-2 -right-2 h-6 w-6 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
                                         onClick={() => removeImage(image.id)}
+                                        disabled={image.uploading}
                                     >
                                         <X className="h-3 w-3" />
                                     </Button>
@@ -207,6 +444,24 @@ export function ImageUpload({ images, onChange, maxImages = 10, maxSizePerImage 
                                             {image.name}
                                         </p>
                                         <p className="text-xs text-gray-500">{formatFileSize(image.size)}</p>
+                                        {image.error && (
+                                            <div className="space-y-1">
+                                                <p className="text-xs text-red-500">{image.error}</p>
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="h-6 text-xs"
+                                                    onClick={() => retryUpload(image.id)}
+                                                >
+                                                    Tentar novamente
+                                                </Button>
+                                            </div>
+                                        )}
+                                        {image.uploaded && <p className="text-xs text-green-600">✓ Salvo no OneDrive</p>}
+                                        {image.file && !image.uploaded && !image.uploading && !image.error && (
+                                            <p className="text-xs text-yellow-600">⏳ Aguardando upload</p>
+                                        )}
                                     </div>
                                 </div>
                             ))}
