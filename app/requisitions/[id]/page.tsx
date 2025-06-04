@@ -34,6 +34,22 @@ function RequisitionDetail() {
     const [error, setError] = useState("")
     const [activeTab, setActiveTab] = useState("details")
 
+    const formatDateSafely = (date: Date | undefined | null, formatString = "dd/MM/yyyy") => {
+        if (!date || !(date instanceof Date) || isNaN(date.getTime())) {
+            return "Data inválida"
+        }
+        try {
+            return format(date, formatString, { locale: ptBR })
+        } catch (error) {
+            console.error("Erro ao formatar data:", error)
+            return "Data inválida"
+        }
+    }
+
+    const formatDateTimeSafely = (date: Date | undefined | null) => {
+        return formatDateSafely(date, "dd/MM/yyyy 'às' HH:mm")
+    }
+
     useEffect(() => {
         const loadRequisition = async () => {
             try {
@@ -145,9 +161,7 @@ function RequisitionDetail() {
                                         <FileText className="h-5 w-5" />
                                         Protocolo: {requisition.protocol}
                                     </CardTitle>
-                                    <CardDescription>
-                                        Criado em {format(requisition.createdAt, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
-                                    </CardDescription>
+                                    <CardDescription>Criado em {formatDateTimeSafely(requisition.createdAt)}</CardDescription>
                                 </div>
                                 <div className="flex items-center gap-2">
                                     {getStatusBadge(requisition.status)}
@@ -215,7 +229,7 @@ function RequisitionDetail() {
                                                         <p className="text-sm font-medium text-gray-500">Data de Recebimento</p>
                                                         <div className="flex items-center">
                                                             <Calendar className="h-3 w-3 mr-1 text-gray-400" />
-                                                            <span>{format(requisition.receivedDate, "dd/MM/yyyy", { locale: ptBR })}</span>
+                                                            <span>{formatDateSafely(requisition.receivedDate)}</span>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -281,8 +295,7 @@ function RequisitionDetail() {
                                                                     {image.name}
                                                                 </p>
                                                                 <p className="text-xs text-gray-500">
-                                                                    {(image.size / 1024).toFixed(1)} KB •{" "}
-                                                                    {format(image.uploadedAt, "dd/MM/yyyy", { locale: ptBR })}
+                                                                    {(image.size / 1024).toFixed(1)} KB • {formatDateSafely(image.uploadedAt)}
                                                                 </p>
                                                             </div>
                                                         </a>
@@ -303,10 +316,7 @@ function RequisitionDetail() {
                                                     <p className="text-sm font-medium text-gray-500">Data Agendada</p>
                                                     <div className="flex items-center">
                                                         <Calendar className="h-4 w-4 mr-1 text-gray-400" />
-                                                        <span>
-                                                            {requisition.scheduledDate &&
-                                                                format(requisition.scheduledDate, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
-                                                        </span>
+                                                        <span>{requisition.scheduledDate && formatDateTimeSafely(requisition.scheduledDate)}</span>
                                                     </div>
                                                 </div>
                                                 <div>
@@ -319,10 +329,7 @@ function RequisitionDetail() {
                                                 </div>
                                                 <div>
                                                     <p className="text-sm font-medium text-gray-500">Agendado em</p>
-                                                    <p>
-                                                        {requisition.scheduledAt &&
-                                                            format(requisition.scheduledAt, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
-                                                    </p>
+                                                    <p>{requisition.scheduledAt && formatDateTimeSafely(requisition.scheduledAt)}</p>
                                                 </div>
                                             </div>
                                         </div>
