@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { db } from "./firebase"
 import {
     collection,
@@ -12,9 +13,8 @@ import {
     serverTimestamp,
     Timestamp,
 } from "firebase/firestore"
-import type { Requisition, Priority, Status, RegulationType, ImageFile } from "@/types/requisitions"
+import { type Requisition, type Priority, type RegulationType, type ImageFile, type SchedulingHistory, Status } from "@/types/requisitions"
 import type { ProcedureItem } from "@/types/procedures"
-
 interface CreateRequisitionData {
     protocol: string
     patientName: string
@@ -23,7 +23,7 @@ interface CreateRequisitionData {
     susCard: string
     receivedDate: Date
     phones: string[]
-    status: Status
+    status: string
     images?: ImageFile[]
     createdBy: string
     healthUnitId: string
@@ -37,14 +37,36 @@ interface UpdateRequisitionData {
     susCard?: string
     receivedDate?: Date
     phones?: string[]
-    status?: Status
+    status?: string
     images?: ImageFile[]
     scheduledDate?: Date
     scheduledLocation?: string
     regulationType?: RegulationType
+    hasCompanion?: boolean
     scheduledBy?: string
     healthUnitId?: string
     healthAgentId?: string
+}
+
+interface ScheduleRequisitionData {
+    scheduledDate: Date
+    scheduledLocation: string
+    regulationType: RegulationType
+    hasCompanion: boolean
+    scheduledBy: string
+    reason?: string
+}
+
+interface UpdateSchedulingData {
+    status: string
+    reason?: string
+    cancelReason?: string
+    updatedBy: string
+    // Para reagendamento
+    newScheduledDate?: Date
+    newScheduledLocation?: string
+    newRegulationType?: RegulationType
+    newHasCompanion?: boolean
 }
 
 export class RequisitionService {
@@ -62,6 +84,7 @@ export class RequisitionService {
             const docRef = await addDoc(collection(db, "requisitions"), {
                 ...data,
                 receivedDate: Timestamp.fromDate(data.receivedDate),
+                schedulingHistory: [], // Inicializar histórico vazio
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp(),
             })
@@ -77,17 +100,15 @@ export class RequisitionService {
         susCard: string,
         procedures: ProcedureItem[],
     ): Promise<{
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        [x: string]: any
         hasDuplicate: boolean
         duplicates: Array<{ procedure: string; protocol: string; status: string }>
     }> {
         try {
-            // Buscar todas as requisições para o cartão SUS que não estão agendadas
+            // Buscar todas as requisições para o cartão SUS que não estão finalizadas
             const q = query(
                 collection(db, "requisitions"),
                 where("susCard", "==", susCard),
-                where("status", "in", ["PENDENTE", "SIS_PENDENTE"]),
+                where("status", "in", ["PENDENTE", "SIS_PENDENTE", "AGENDADO"]),
             )
 
             const querySnapshot = await getDocs(q)
@@ -150,8 +171,16 @@ export class RequisitionService {
                     scheduledDate: data.scheduledDate?.toDate(),
                     scheduledLocation: data.scheduledLocation,
                     regulationType: data.regulationType,
+                    hasCompanion: data.hasCompanion,
                     scheduledBy: data.scheduledBy,
                     scheduledAt: data.scheduledAt?.toDate(),
+                    schedulingHistory:
+                        data.schedulingHistory?.map((history: any) => ({
+                            ...history,
+                            scheduledDate: history.scheduledDate?.toDate(),
+                            scheduledAt: history.scheduledAt?.toDate(),
+                            canceledAt: history.canceledAt?.toDate(),
+                        })) || [],
                 }
             })
         } catch (error) {
@@ -193,8 +222,16 @@ export class RequisitionService {
                 scheduledDate: data.scheduledDate?.toDate(),
                 scheduledLocation: data.scheduledLocation,
                 regulationType: data.regulationType,
+                hasCompanion: data.hasCompanion,
                 scheduledBy: data.scheduledBy,
                 scheduledAt: data.scheduledAt?.toDate(),
+                schedulingHistory:
+                    data.schedulingHistory?.map((history: any) => ({
+                        ...history,
+                        scheduledDate: history.scheduledDate?.toDate(),
+                        scheduledAt: history.scheduledAt?.toDate(),
+                        canceledAt: history.canceledAt?.toDate(),
+                    })) || [],
             }
         } catch (error) {
             console.error("Erro ao buscar requisição:", error)
@@ -207,7 +244,6 @@ export class RequisitionService {
             const docRef = doc(db, "requisitions", id)
 
             // Criar objeto de atualização com tipos corretos
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const updateData: Record<string, any> = {
                 updatedAt: serverTimestamp(),
             }
@@ -222,6 +258,7 @@ export class RequisitionService {
             if (data.images !== undefined) updateData.images = data.images
             if (data.scheduledLocation !== undefined) updateData.scheduledLocation = data.scheduledLocation
             if (data.regulationType !== undefined) updateData.regulationType = data.regulationType
+            if (data.hasCompanion !== undefined) updateData.hasCompanion = data.hasCompanion
             if (data.scheduledBy !== undefined) updateData.scheduledBy = data.scheduledBy
             if (data.healthUnitId !== undefined) updateData.healthUnitId = data.healthUnitId
             if (data.healthAgentId !== undefined) updateData.healthAgentId = data.healthAgentId
@@ -242,27 +279,180 @@ export class RequisitionService {
         }
     }
 
-    static async scheduleRequisition(
-        id: string,
-        scheduledDate: Date,
-        scheduledLocation: string,
-        regulationType: RegulationType,
-        scheduledBy: string,
-    ): Promise<void> {
+    static async scheduleRequisition(id: string, data: ScheduleRequisitionData): Promise<void> {
         try {
             const docRef = doc(db, "requisitions", id)
 
+            // Buscar requisição atual para adicionar ao histórico
+            const currentReq = await this.getRequisitionById(id)
+            if (!currentReq) {
+                throw new Error("Requisição não encontrada")
+            }
+
+            // Criar entrada no histórico
+            const historyEntry: SchedulingHistory = {
+                id: Date.now().toString(),
+                scheduledDate: data.scheduledDate,
+                scheduledLocation: data.scheduledLocation,
+                regulationType: data.regulationType,
+                hasCompanion: data.hasCompanion,
+                status: Status.AGENDADO,
+                reason: data.reason,
+                scheduledBy: data.scheduledBy,
+                scheduledAt: new Date(),
+            }
+
+            const updatedHistory = [...(currentReq.schedulingHistory || []), historyEntry]
+
             await updateDoc(docRef, {
-                status: "AGENDADO",
-                scheduledDate: Timestamp.fromDate(scheduledDate),
-                scheduledLocation,
-                regulationType,
-                scheduledBy,
+                status: Status.AGENDADO,
+                scheduledDate: Timestamp.fromDate(data.scheduledDate),
+                scheduledLocation: data.scheduledLocation,
+                regulationType: data.regulationType,
+                hasCompanion: data.hasCompanion,
+                scheduledBy: data.scheduledBy,
                 scheduledAt: serverTimestamp(),
+                schedulingHistory: updatedHistory.map((h) => ({
+                    ...h,
+                    scheduledDate: h.scheduledDate ? Timestamp.fromDate(h.scheduledDate) : null,
+                    scheduledAt: Timestamp.fromDate(h.scheduledAt),
+                    canceledAt: h.canceledAt ? Timestamp.fromDate(h.canceledAt) : null,
+                })),
                 updatedAt: serverTimestamp(),
             })
         } catch (error) {
             console.error("Erro ao agendar requisição:", error)
+            throw error
+        }
+    }
+
+    static async updateScheduling(id: string, data: UpdateSchedulingData): Promise<void> {
+        try {
+            const docRef = doc(db, "requisitions", id)
+
+            // Buscar requisição atual para adicionar ao histórico
+            const currentReq = await this.getRequisitionById(id)
+            if (!currentReq) {
+                throw new Error("Requisição não encontrada")
+            }
+
+            let updateData: Record<string, any> = {
+                status: data.status,
+                updatedAt: serverTimestamp(),
+            }
+
+            // Criar entrada no histórico baseada na ação
+            let historyEntry: SchedulingHistory
+
+            if (data.status === "CANCELADO" || data.status === "CANCELADO_ARQUIVADO") {
+                // Cancelamento
+                historyEntry = {
+                    id: Date.now().toString(),
+                    scheduledDate: currentReq.scheduledDate,
+                    scheduledLocation: currentReq.scheduledLocation,
+                    regulationType: currentReq.regulationType,
+                    hasCompanion: currentReq.hasCompanion || false,
+                    status: data.status as Status,
+                    reason: data.reason,
+                    scheduledBy: currentReq.scheduledBy || "",
+                    scheduledAt: currentReq.scheduledAt || new Date(),
+                    canceledBy: data.updatedBy,
+                    canceledAt: new Date(),
+                    cancelReason: data.cancelReason,
+                }
+
+                // Limpar dados de agendamento atual
+                updateData = {
+                    ...updateData,
+                    scheduledDate: null,
+                    scheduledLocation: null,
+                    regulationType: null,
+                    hasCompanion: null,
+                    scheduledBy: null,
+                    scheduledAt: null,
+                }
+            } else if (data.status === "RESOLICITADO") {
+                // Resolicitação
+                historyEntry = {
+                    id: Date.now().toString(),
+                    scheduledDate: currentReq.scheduledDate,
+                    scheduledLocation: currentReq.scheduledLocation,
+                    regulationType: currentReq.regulationType,
+                    hasCompanion: currentReq.hasCompanion || false,
+                    status: data.status as Status,
+                    reason: data.reason,
+                    scheduledBy: currentReq.scheduledBy || "",
+                    scheduledAt: currentReq.scheduledAt || new Date(),
+                    canceledBy: data.updatedBy,
+                    canceledAt: new Date(),
+                    cancelReason: data.cancelReason,
+                }
+
+                // Limpar dados de agendamento atual e voltar para pendente
+                updateData = {
+                    ...updateData,
+                    status: "PENDENTE", // Resolicitado volta para pendente
+                    scheduledDate: null,
+                    scheduledLocation: null,
+                    regulationType: null,
+                    hasCompanion: null,
+                    scheduledBy: null,
+                    scheduledAt: null,
+                }
+            } else if (data.newScheduledDate) {
+                // Reagendamento
+                historyEntry = {
+                    id: Date.now().toString(),
+                    scheduledDate: data.newScheduledDate,
+                    scheduledLocation: data.newScheduledLocation,
+                    regulationType: data.newRegulationType,
+                    hasCompanion: data.newHasCompanion || false,
+                    status: Status.AGENDADO,
+                    reason: data.reason,
+                    scheduledBy: data.updatedBy,
+                    scheduledAt: new Date(),
+                }
+
+                // Atualizar dados de agendamento
+                updateData = {
+                    ...updateData,
+                    status: Status.AGENDADO,
+                    scheduledDate: Timestamp.fromDate(data.newScheduledDate),
+                    scheduledLocation: data.newScheduledLocation,
+                    regulationType: data.newRegulationType,
+                    hasCompanion: data.newHasCompanion,
+                    scheduledBy: data.updatedBy,
+                    scheduledAt: serverTimestamp(),
+                }
+            } else {
+                // Outras atualizações de status
+                historyEntry = {
+                    id: Date.now().toString(),
+                    scheduledDate: currentReq.scheduledDate,
+                    scheduledLocation: currentReq.scheduledLocation,
+                    regulationType: currentReq.regulationType,
+                    hasCompanion: currentReq.hasCompanion || false,
+                    status: data.status as Status,
+                    reason: data.reason,
+                    scheduledBy: currentReq.scheduledBy || "",
+                    scheduledAt: currentReq.scheduledAt || new Date(),
+                    canceledBy: data.updatedBy,
+                    canceledAt: new Date(),
+                }
+            }
+
+            const updatedHistory = [...(currentReq.schedulingHistory || []), historyEntry]
+
+            updateData.schedulingHistory = updatedHistory.map((h) => ({
+                ...h,
+                scheduledDate: h.scheduledDate ? Timestamp.fromDate(h.scheduledDate) : null,
+                scheduledAt: Timestamp.fromDate(h.scheduledAt),
+                canceledAt: h.canceledAt ? Timestamp.fromDate(h.canceledAt) : null,
+            }))
+
+            await updateDoc(docRef, updateData)
+        } catch (error) {
+            console.error("Erro ao atualizar agendamento:", error)
             throw error
         }
     }
@@ -294,8 +484,16 @@ export class RequisitionService {
                     scheduledDate: data.scheduledDate?.toDate(),
                     scheduledLocation: data.scheduledLocation,
                     regulationType: data.regulationType,
+                    hasCompanion: data.hasCompanion,
                     scheduledBy: data.scheduledBy,
                     scheduledAt: data.scheduledAt?.toDate(),
+                    schedulingHistory:
+                        data.schedulingHistory?.map((history: any) => ({
+                            ...history,
+                            scheduledDate: history.scheduledDate?.toDate(),
+                            scheduledAt: history.scheduledAt?.toDate(),
+                            canceledAt: history.canceledAt?.toDate(),
+                        })) || [],
                 }
             })
 
@@ -339,8 +537,16 @@ export class RequisitionService {
                     scheduledDate: data.scheduledDate?.toDate(),
                     scheduledLocation: data.scheduledLocation,
                     regulationType: data.regulationType,
+                    hasCompanion: data.hasCompanion,
                     scheduledBy: data.scheduledBy,
                     scheduledAt: data.scheduledAt?.toDate(),
+                    schedulingHistory:
+                        data.schedulingHistory?.map((history: any) => ({
+                            ...history,
+                            scheduledDate: history.scheduledDate?.toDate(),
+                            scheduledAt: history.scheduledAt?.toDate(),
+                            canceledAt: history.canceledAt?.toDate(),
+                        })) || [],
                 }
             })
 
