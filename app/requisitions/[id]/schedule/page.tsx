@@ -169,7 +169,7 @@ function ScheduleRequisitionForm() {
                             </CardDescription>
                         </CardHeader>
                         <form onSubmit={handleSubmit}>
-                            <CardContent className="space-y-6">
+                            <CardContent className="space-y-6 mb-6">
                                 {error && (
                                     <Alert variant="destructive">
                                         <AlertDescription>{error}</AlertDescription>
