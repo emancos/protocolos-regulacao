@@ -8,13 +8,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
-import { ArrowLeft, Calendar, Phone, FileText } from "lucide-react"
+import { ArrowLeft, Calendar, Phone, FileText, Edit, History } from "lucide-react"
 import Link from "next/link"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { RequisitionService } from "@/lib/requisition-service"
-import { type Requisition, Status, Priority, PRIORITY_LABELS, STATUS_LABELS } from "@/types/requisitions"
+import { type Requisition, Status, Priority, PRIORITY_LABELS, STATUS_LABELS, STATUS_COLORS } from "@/types/requisitions"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
+import { useUser } from "@/contexts/user-context"
 
 export default function RequisitionDetailPage() {
     return (
@@ -27,6 +28,7 @@ export default function RequisitionDetailPage() {
 function RequisitionDetail() {
     const params = useParams()
     // const router = useRouter()
+    const { hasPermission } = useUser()
     const requisitionId = params.id as string
 
     const [requisition, setRequisition] = useState<Requisition | null>(null)
@@ -87,20 +89,7 @@ function RequisitionDetail() {
     }
 
     const getStatusBadge = (status: Status) => {
-        switch (status) {
-            case Status.PENDENTE:
-                return <Badge variant="outline">Pendente</Badge>
-            case Status.AGENDADO:
-                return <Badge className="bg-blue-500">Agendado</Badge>
-            case Status.REALIZADO:
-                return <Badge className="bg-green-500">Realizado</Badge>
-            case Status.CANCELADO:
-                return <Badge variant="destructive">Cancelado</Badge>
-            case Status.SIS_PENDENTE:
-                return <Badge variant="secondary">SIS Pendente</Badge>
-            default:
-                return <Badge>{status}</Badge>
-        }
+        return <Badge className={`${STATUS_COLORS[status]} text-white`}>{STATUS_LABELS[status]}</Badge>
     }
 
     if (loading) {
@@ -182,6 +171,15 @@ function RequisitionDetail() {
                                         </TabsTrigger>
                                     )}
                                     {requisition.status === Status.AGENDADO && <TabsTrigger value="schedule">Agendamento</TabsTrigger>}
+                                    {requisition.schedulingHistory && requisition.schedulingHistory.length > 0 && (
+                                        <TabsTrigger value="history">
+                                            <History className="h-4 w-4 mr-2" />
+                                            Histórico
+                                            <Badge variant="secondary" className="ml-2">
+                                                {requisition.schedulingHistory.length}
+                                            </Badge>
+                                        </TabsTrigger>
+                                    )}
                                 </TabsList>
 
                                 <TabsContent value="details">
@@ -328,9 +326,80 @@ function RequisitionDetail() {
                                                     <p>{requisition.regulationType}</p>
                                                 </div>
                                                 <div>
+                                                    <p className="text-sm font-medium text-gray-500">Acompanhante</p>
+                                                    <p>{requisition.hasCompanion ? "Permitido" : "Não permitido"}</p>
+                                                </div>
+                                                <div>
                                                     <p className="text-sm font-medium text-gray-500">Agendado em</p>
                                                     <p>{requisition.scheduledAt && formatDateTimeSafely(requisition.scheduledAt)}</p>
                                                 </div>
+                                            </div>
+                                        </div>
+                                    </TabsContent>
+                                )}
+
+                                {requisition.schedulingHistory && requisition.schedulingHistory.length > 0 && (
+                                    <TabsContent value="history">
+                                        <div className="space-y-4">
+                                            <h3 className="text-lg font-medium">Histórico de Agendamentos</h3>
+                                            <Separator className="my-2" />
+                                            <div className="space-y-4">
+                                                {requisition.schedulingHistory
+                                                    .sort((a, b) => new Date(b.scheduledAt).getTime() - new Date(a.scheduledAt).getTime())
+                                                    .map((history, index) => (
+                                                        <div key={history.id} className="border rounded-lg p-4">
+                                                            <div className="flex items-center justify-between mb-3">
+                                                                <div className="flex items-center space-x-2">
+                                                                    {getStatusBadge(history.status)}
+                                                                    <span className="text-sm text-gray-500">
+                                                                        #{requisition.schedulingHistory!.length - index}
+                                                                    </span>
+                                                                </div>
+                                                                <span className="text-sm text-gray-500">
+                                                                    {formatDateTimeSafely(history.scheduledAt)}
+                                                                </span>
+                                                            </div>
+
+                                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                                                                {history.scheduledDate && (
+                                                                    <div>
+                                                                        <p className="text-gray-500">Data/Hora</p>
+                                                                        <p>{formatDateTimeSafely(history.scheduledDate)}</p>
+                                                                    </div>
+                                                                )}
+                                                                {history.scheduledLocation && (
+                                                                    <div>
+                                                                        <p className="text-gray-500">Local</p>
+                                                                        <p>{history.scheduledLocation}</p>
+                                                                    </div>
+                                                                )}
+                                                                {history.regulationType && (
+                                                                    <div>
+                                                                        <p className="text-gray-500">Regulação</p>
+                                                                        <p>{history.regulationType}</p>
+                                                                    </div>
+                                                                )}
+                                                                <div>
+                                                                    <p className="text-gray-500">Acompanhante</p>
+                                                                    <p>{history.hasCompanion ? "Sim" : "Não"}</p>
+                                                                </div>
+                                                            </div>
+
+                                                            {history.reason && (
+                                                                <div className="mt-3">
+                                                                    <p className="text-gray-500 text-sm">Observações</p>
+                                                                    <p className="text-sm">{history.reason}</p>
+                                                                </div>
+                                                            )}
+
+                                                            {history.cancelReason && (
+                                                                <div className="mt-3">
+                                                                    <p className="text-gray-500 text-sm">Motivo</p>
+                                                                    <p className="text-sm text-red-600">{history.cancelReason}</p>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    ))}
                                             </div>
                                         </div>
                                     </TabsContent>
@@ -341,11 +410,21 @@ function RequisitionDetail() {
                                 <Button variant="outline" asChild>
                                     <Link href="/requisitions">Voltar para Lista</Link>
                                 </Button>
-                                {requisition.status === Status.PENDENTE && (
-                                    <Button asChild>
-                                        <Link href={`/requisitions/${requisitionId}/schedule`}>Agendar</Link>
-                                    </Button>
-                                )}
+                                <div className="flex space-x-2">
+                                    {requisition.status === Status.PENDENTE && hasPermission("canApproveRequests") && (
+                                        <Button asChild>
+                                            <Link href={`/requisitions/${requisitionId}/schedule`}>Agendar</Link>
+                                        </Button>
+                                    )}
+                                    {requisition.status === Status.AGENDADO && hasPermission("canApproveRequests") && (
+                                        <Button asChild variant="outline">
+                                            <Link href={`/requisitions/${requisitionId}/edit`}>
+                                                <Edit className="h-4 w-4 mr-2" />
+                                                Editar Agendamento
+                                            </Link>
+                                        </Button>
+                                    )}
+                                </div>
                             </div>
                         </CardContent>
                     </Card>
