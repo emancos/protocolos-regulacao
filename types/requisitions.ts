@@ -12,6 +12,8 @@ export enum Status {
     AGENDADO = "AGENDADO",
     REALIZADO = "REALIZADO",
     CANCELADO = "CANCELADO",
+    CANCELADO_ARQUIVADO = "CANCELADO_ARQUIVADO",
+    RESOLICITADO = "RESOLICITADO",
     SIS_PENDENTE = "SIS PENDENTE",
 }
 
@@ -28,6 +30,21 @@ export interface ImageFile {
     url: string
     uploadedAt: Date
     oneDriveId?: string // ID do arquivo no OneDrive para possível exclusão
+}
+
+export interface SchedulingHistory {
+    id: string
+    scheduledDate?: Date
+    scheduledLocation?: string
+    regulationType?: RegulationType
+    hasCompanion: boolean
+    status: Status
+    reason?: string // Motivo da alteração
+    scheduledBy: string
+    scheduledAt: Date
+    canceledBy?: string
+    canceledAt?: Date
+    cancelReason?: string
 }
 
 export interface Requisition {
@@ -49,12 +66,16 @@ export interface Requisition {
     healthUnitId: string
     healthAgentId?: string // Opcional
 
-    // Campos de agendamento (opcionais)
+    // Campos de agendamento atual (opcionais)
     scheduledDate?: Date
     scheduledLocation?: string
     regulationType?: RegulationType
+    hasCompanion?: boolean // Novo campo para acompanhante
     scheduledBy?: string
     scheduledAt?: Date
+
+    // Histórico de agendamentos
+    schedulingHistory?: SchedulingHistory[]
 }
 
 export const PRIORITY_LABELS = {
@@ -69,6 +90,8 @@ export const STATUS_LABELS = {
     [Status.AGENDADO]: "Agendado",
     [Status.REALIZADO]: "Realizado",
     [Status.CANCELADO]: "Cancelado",
+    [Status.CANCELADO_ARQUIVADO]: "Cancelado (Arquivado)",
+    [Status.RESOLICITADO]: "Resolicitado",
     [Status.SIS_PENDENTE]: "SIS Pendente",
 }
 
@@ -76,4 +99,14 @@ export const REGULATION_TYPE_LABELS = {
     [RegulationType.JOAO_PESSOA]: "Regulação Município de João Pessoa",
     [RegulationType.CAMPINA_GRANDE]: "Regulação Município de Campina Grande",
     [RegulationType.ESTADUAL]: "Regulação Estadual",
+}
+
+export const STATUS_COLORS = {
+    [Status.PENDENTE]: "bg-yellow-500",
+    [Status.AGENDADO]: "bg-blue-500",
+    [Status.REALIZADO]: "bg-green-500",
+    [Status.CANCELADO]: "bg-red-500",
+    [Status.CANCELADO_ARQUIVADO]: "bg-gray-500",
+    [Status.RESOLICITADO]: "bg-orange-500",
+    [Status.SIS_PENDENTE]: "bg-purple-500",
 }
