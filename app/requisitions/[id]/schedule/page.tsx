@@ -15,6 +15,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Textarea } from "@/components/ui/textarea"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { CalendarIcon, ArrowLeft, Clock } from "lucide-react"
@@ -46,6 +48,8 @@ function ScheduleRequisitionForm() {
     const [scheduledTime, setScheduledTime] = useState("08:00")
     const [scheduledLocation, setScheduledLocation] = useState("")
     const [regulationType, setRegulationType] = useState<RegulationType>(RegulationType.JOAO_PESSOA)
+    const [hasCompanion, setHasCompanion] = useState(false)
+    const [reason, setReason] = useState("")
 
     const [loading, setLoading] = useState(false)
     const [loadingRequisition, setLoadingRequisition] = useState(true)
@@ -89,13 +93,14 @@ function ScheduleRequisitionForm() {
             const fullScheduledDate = new Date(scheduledDate)
             fullScheduledDate.setHours(hours, minutes)
 
-            await RequisitionService.scheduleRequisition(
-                requisitionId,
-                fullScheduledDate,
+            await RequisitionService.scheduleRequisition(requisitionId, {
+                scheduledDate: fullScheduledDate,
                 scheduledLocation,
                 regulationType,
-                user?.uid || "",
-            )
+                hasCompanion,
+                scheduledBy: user?.uid || "",
+                reason: reason || "Agendamento inicial",
+            })
 
             router.push("/requisitions")
         } catch (error) {
@@ -263,7 +268,7 @@ function ScheduleRequisitionForm() {
                                         />
                                     </div>
 
-                                    <div className="space-y-2 md:col-span-2">
+                                    <div className="space-y-2">
                                         <Label htmlFor="regulationType">Tipo de Regulação *</Label>
                                         <Select
                                             value={regulationType}
@@ -280,6 +285,31 @@ function ScheduleRequisitionForm() {
                                                 ))}
                                             </SelectContent>
                                         </Select>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <div className="flex items-center space-x-2">
+                                            <Checkbox
+                                                id="hasCompanion"
+                                                checked={hasCompanion}
+                                                onCheckedChange={(checked: boolean) => setHasCompanion(checked as boolean)}
+                                            />
+                                            <Label htmlFor="hasCompanion">Tem direito a acompanhante</Label>
+                                        </div>
+                                        <p className="text-xs text-gray-500">
+                                            Marque se o paciente tem direito a levar um acompanhante na consulta/exame
+                                        </p>
+                                    </div>
+
+                                    <div className="space-y-2 md:col-span-2">
+                                        <Label htmlFor="reason">Observações</Label>
+                                        <Textarea
+                                            id="reason"
+                                            value={reason}
+                                            onChange={(e: { target: { value: React.SetStateAction<string> } }) => setReason(e.target.value)}
+                                            placeholder="Observações sobre o agendamento (opcional)"
+                                            rows={3}
+                                        />
                                     </div>
                                 </div>
                             </CardContent>
