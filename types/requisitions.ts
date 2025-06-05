@@ -110,3 +110,5 @@ export const STATUS_COLORS = {
     [Status.RESOLICITADO]: "bg-orange-500",
     [Status.SIS_PENDENTE]: "bg-purple-500",
 }
+
+export type ActionType = "cancel" | "archive" | "reschedule" | "resolicit" | "complete" | "";
