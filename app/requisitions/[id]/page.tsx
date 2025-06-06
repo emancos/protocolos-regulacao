@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
-import { ArrowLeft, Calendar, Phone, FileText, Edit, History, ArchiveX } from "lucide-react"
+import { ArrowLeft, Calendar, Phone, FileText, Edit, History, ArchiveRestore } from "lucide-react"
 import Link from "next/link"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { RequisitionService } from "@/lib/requisition-service"
@@ -411,27 +411,36 @@ function RequisitionDetail() {
                                     <Link href="/requisitions">Voltar para Lista</Link>
                                 </Button>
                                 <div className="flex space-x-2">
-                                    {requisition.status === Status.PENDENTE && hasPermission("canApproveRequests") && (
-                                        <Button asChild>
-                                            <Link href={`/requisitions/${requisitionId}/schedule`}>Agendar</Link>
-                                        </Button>
-                                    )}
-                                    {requisition.status === Status.AGENDADO && hasPermission("canApproveRequests") && (
-                                        <Button asChild variant="outline">
-                                            <Link href={`/requisitions/${requisitionId}/edit`}>
-                                                <Edit className="h-4 w-4 mr-2" />
-                                                Editar Agendamento
-                                            </Link>
-                                        </Button>
-                                    )}
+                                    {/* 1. Botão AGENDAR: Aparece apenas para status pendentes */}
                                     {(requisition.status === Status.PENDENTE ||
                                         requisition.status === Status.SIS_PENDENTE ||
                                         requisition.status === Status.RESOLICITADO) &&
                                         hasPermission("canApproveRequests") && (
-                                            <Button asChild variant="destructive" size="sm">
+                                            <Button asChild>
+                                                <Link href={`/requisitions/${requisitionId}/schedule`}>Agendar</Link>
+                                            </Button>
+                                        )}
+
+                                    {/* 2. Botão EDITAR: Aparece para todos, EXCETO os cancelados/arquivados */}
+                                    {requisition.status !== Status.CANCELADO &&
+                                        requisition.status !== Status.CANCELADO_ARQUIVADO &&
+                                        hasPermission("canApproveRequests") && (
+                                            <Button asChild variant="outline">
+                                                <Link href={`/requisitions/${requisitionId}/edit`}>
+                                                    <Edit className="h-4 w-4 mr-2" />
+                                                    Editar Solicitação
+                                                </Link>
+                                            </Button>
+                                        )}
+
+                                    {/* 3. Botão ATIVAR: Aparece APENAS para os cancelados/arquivados */}
+                                    {(requisition.status === Status.CANCELADO ||
+                                        requisition.status === Status.CANCELADO_ARQUIVADO) &&
+                                        hasPermission("canApproveRequests") && (
+                                            <Button asChild>
                                                 <Link href={`/requisitions/${requisition.id}/edit`}>
-                                                    <ArchiveX className="h-4 w-4 mr-2" />
-                                                    Cancelar e Arquivar
+                                                    <ArchiveRestore className="h-4 w-4 mr-2" />
+                                                    Ativar Protocolo
                                                 </Link>
                                             </Button>
                                         )}
