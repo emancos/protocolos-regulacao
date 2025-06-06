@@ -57,11 +57,11 @@ interface ScheduleRequisitionData {
     reason?: string
 }
 
-interface UpdateSchedulingData {
+export interface UpdateSchedulingData {
     status: string
+    updatedBy: string
     reason?: string
     cancelReason?: string
-    updatedBy: string
     // Para reagendamento
     newScheduledDate?: Date
     newScheduledLocation?: string
@@ -353,12 +353,12 @@ export class RequisitionService {
                     regulationType: currentReq.regulationType,
                     hasCompanion: currentReq.hasCompanion || false,
                     status: data.status as Status,
-                    reason: data.reason,
+                    ...(data.reason && { reason: data.reason }),
                     scheduledBy: currentReq.scheduledBy || "",
                     scheduledAt: currentReq.scheduledAt || new Date(),
                     canceledBy: data.updatedBy,
                     canceledAt: new Date(),
-                    cancelReason: data.cancelReason,
+                    ...(data.cancelReason && { cancelReason: data.cancelReason }),
                 }
 
                 // Limpar dados de agendamento atual
@@ -380,18 +380,18 @@ export class RequisitionService {
                     regulationType: currentReq.regulationType,
                     hasCompanion: currentReq.hasCompanion || false,
                     status: data.status as Status,
-                    reason: data.reason,
+                    ...(data.reason && { reason: data.reason }),
                     scheduledBy: currentReq.scheduledBy || "",
                     scheduledAt: currentReq.scheduledAt || new Date(),
                     canceledBy: data.updatedBy,
                     canceledAt: new Date(),
-                    cancelReason: data.cancelReason,
+                    ...(data.cancelReason && { cancelReason: data.cancelReason }),
                 }
 
                 // Limpar dados de agendamento atual e voltar para pendente
                 updateData = {
                     ...updateData,
-                    status: "PENDENTE", // Resolicitado volta para pendente
+                    status: "RESOLICITADO", // Resolicitado volta para pendente
                     scheduledDate: null,
                     scheduledLocation: null,
                     regulationType: null,
@@ -408,7 +408,7 @@ export class RequisitionService {
                     regulationType: data.newRegulationType,
                     hasCompanion: data.newHasCompanion || false,
                     status: Status.AGENDADO,
-                    reason: data.reason,
+                    ...(data.reason && { reason: data.reason }),
                     scheduledBy: data.updatedBy,
                     scheduledAt: new Date(),
                 }
@@ -418,11 +418,17 @@ export class RequisitionService {
                     ...updateData,
                     status: Status.AGENDADO,
                     scheduledDate: Timestamp.fromDate(data.newScheduledDate),
-                    scheduledLocation: data.newScheduledLocation,
-                    regulationType: data.newRegulationType,
-                    hasCompanion: data.newHasCompanion,
                     scheduledBy: data.updatedBy,
                     scheduledAt: serverTimestamp(),
+                }
+                if (data.newScheduledLocation !== undefined) {
+                    updateData.scheduledLocation = data.newScheduledLocation
+                }
+                if (data.newRegulationType !== undefined) {
+                    updateData.regulationType = data.newRegulationType
+                }
+                if (data.newHasCompanion !== undefined) {
+                    updateData.hasCompanion = data.newHasCompanion
                 }
             } else {
                 // Outras atualizações de status
@@ -433,7 +439,7 @@ export class RequisitionService {
                     regulationType: currentReq.regulationType,
                     hasCompanion: currentReq.hasCompanion || false,
                     status: data.status as Status,
-                    reason: data.reason,
+                    ...(data.reason && { reason: data.reason }),
                     scheduledBy: currentReq.scheduledBy || "",
                     scheduledAt: currentReq.scheduledAt || new Date(),
                     canceledBy: data.updatedBy,
@@ -499,7 +505,10 @@ export class RequisitionService {
 
             // Filtrar no cliente para requisições pendentes
             const pendingRequisitions = allRequisitions.filter(
-                (req) => req.status === "PENDENTE" || req.status === "SIS_PENDENTE",
+                (req) =>
+                    req.status === "PENDENTE" ||
+                    req.status === "SIS_PENDENTE" ||
+                    req.status === "RESOLICITADO"
             )
 
             // Ordenar por data de recebimento (mais recentes primeiro)
