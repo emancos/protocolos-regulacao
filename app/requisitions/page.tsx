@@ -16,7 +16,7 @@ import { ArrowLeft, Plus, Search, Calendar, Clock, RefreshCw } from "lucide-reac
 import Link from "next/link"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { RequisitionService } from "@/lib/requisition-service"
-import { type Requisition, Status, Priority } from "@/types/requisitions"
+import { type Requisition, Status, Priority, STATUS_LABELS, STATUS_COLORS } from "@/types/requisitions"
 
 export default function RequisitionsPage() {
     return (
@@ -84,20 +84,11 @@ function RequisitionsContent() {
     }
 
     const getStatusBadge = (status: Status) => {
-        switch (status) {
-            case Status.PENDENTE:
-                return <Badge variant="outline">Pendente</Badge>
-            case Status.AGENDADO:
-                return <Badge className="bg-blue-500">Agendado</Badge>
-            case Status.REALIZADO:
-                return <Badge className="bg-green-500">Realizado</Badge>
-            case Status.CANCELADO:
-                return <Badge variant="destructive">Cancelado</Badge>
-            case Status.SIS_PENDENTE:
-                return <Badge variant="secondary">SIS Pendente</Badge>
-            default:
-                return <Badge>{status}</Badge>
+        // Verifica se as chaves existem para evitar erros caso um novo status seja adicionado sem cor/label
+        if (!STATUS_COLORS[status] || !STATUS_LABELS[status]) {
+            return <Badge>{status}</Badge>
         }
+        return <Badge className={`${STATUS_COLORS[status]} text-white`}>{STATUS_LABELS[status]}</Badge>
     }
 
     return (
