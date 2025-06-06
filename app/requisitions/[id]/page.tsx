@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
-import { ArrowLeft, Calendar, Phone, FileText, Edit, History } from "lucide-react"
+import { ArrowLeft, Calendar, Phone, FileText, Edit, History, ArchiveX } from "lucide-react"
 import Link from "next/link"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { RequisitionService } from "@/lib/requisition-service"
@@ -424,6 +424,17 @@ function RequisitionDetail() {
                                             </Link>
                                         </Button>
                                     )}
+                                    {(requisition.status === Status.PENDENTE ||
+                                        requisition.status === Status.SIS_PENDENTE ||
+                                        requisition.status === Status.RESOLICITADO) &&
+                                        hasPermission("canApproveRequests") && (
+                                            <Button asChild variant="destructive" size="sm">
+                                                <Link href={`/requisitions/${requisition.id}/edit`}>
+                                                    <ArchiveX className="h-4 w-4 mr-2" />
+                                                    Cancelar e Arquivar
+                                                </Link>
+                                            </Button>
+                                        )}
                                 </div>
                             </div>
                         </CardContent>
