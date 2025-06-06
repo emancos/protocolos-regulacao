@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
-import { ArrowLeft, Plus, Search, Calendar, Clock, RefreshCw } from "lucide-react"
+import { ArrowLeft, Plus, Search, Calendar, Clock, RefreshCw, Archive } from "lucide-react"
 import Link from "next/link"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { RequisitionService } from "@/lib/requisition-service"
@@ -32,6 +32,7 @@ function RequisitionsContent() {
     const [activeTab, setActiveTab] = useState("pending")
     const [pendingRequisitions, setPendingRequisitions] = useState<Requisition[]>([])
     const [scheduledRequisitions, setScheduledRequisitions] = useState<Requisition[]>([])
+    const [canceledRequisitions, setCanceledRequisitions] = useState<Requisition[]>([])
     const [loading, setLoading] = useState(true)
     const [searchTerm, setSearchTerm] = useState("")
 
@@ -40,9 +41,11 @@ function RequisitionsContent() {
             setLoading(true)
             const pending = await RequisitionService.getPendingRequisitions()
             const scheduled = await RequisitionService.getScheduledRequisitions()
+            const canceled = await RequisitionService.getCanceledRequisitions()
 
             setPendingRequisitions(pending)
             setScheduledRequisitions(scheduled)
+            setCanceledRequisitions(canceled)
         } catch (error) {
             console.error("Erro ao carregar requisições:", error)
         } finally {
@@ -62,6 +65,13 @@ function RequisitionsContent() {
     )
 
     const filteredScheduled = scheduledRequisitions.filter(
+        (req) =>
+            req.patientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            req.protocol.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            req.procedures.some((proc) => proc.name.toLowerCase().includes(searchTerm.toLowerCase())),
+    )
+
+    const filteredCanceled = canceledRequisitions.filter(
         (req) =>
             req.patientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
             req.protocol.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -156,6 +166,13 @@ function RequisitionsContent() {
                                         Agendados
                                         <Badge variant="secondary" className="ml-2">
                                             {filteredScheduled.length}
+                                        </Badge>
+                                    </TabsTrigger>
+                                    <TabsTrigger value="canceled" className="flex items-center">
+                                        <Archive className="h-4 w-4 mr-2" />
+                                        Cancelados e Arquivados
+                                        <Badge variant="secondary" className="ml-2">
+                                            {filteredCanceled.length}
                                         </Badge>
                                     </TabsTrigger>
                                 </TabsList>
@@ -268,6 +285,64 @@ function RequisitionsContent() {
                                                             </TableCell>
                                                             <TableCell>{req.scheduledLocation}</TableCell>
                                                             <TableCell>{req.regulationType}</TableCell>
+                                                            <TableCell>
+                                                                <Button
+                                                                    variant="outline"
+                                                                    size="sm"
+                                                                    onClick={() => router.push(`/requisitions/${req.id}`)}
+                                                                >
+                                                                    Detalhes
+                                                                </Button>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                </TableBody>
+                                            </Table>
+                                        </div>
+                                    )}
+                                </TabsContent>
+
+                                <TabsContent value="canceled">
+                                    {loading ? (
+                                        <div className="text-center py-8">
+                                            <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-4" />
+                                            <p>Carregando requisições...</p>
+                                        </div>
+                                    ) : filteredCanceled.length === 0 ? (
+                                        <div className="text-center py-8 text-gray-500">
+                                            {searchTerm ? "Nenhuma requisição encontrada para esta busca" : "Não há requisições canceladas"}
+                                        </div>
+                                    ) : (
+                                        <div className="overflow-x-auto">
+                                            <Table>
+                                                <TableHeader>
+                                                    <TableRow>
+                                                        <TableHead>Protocolo</TableHead>
+                                                        <TableHead>Paciente</TableHead>
+                                                        <TableHead>Procedimento</TableHead>
+                                                        <TableHead>Prioridade</TableHead>
+                                                        <TableHead>Recebido</TableHead>
+                                                        <TableHead>Status</TableHead>
+                                                        <TableHead>Ações</TableHead>
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {filteredCanceled.map((req) => (
+                                                        <TableRow key={req.id}>
+                                                            <TableCell className="font-medium">{req.protocol}</TableCell>
+                                                            <TableCell>{req.patientName}</TableCell>
+                                                            <TableCell>
+                                                                <div className="space-y-1">
+                                                                    {req.procedures.map((proc, index) => (
+                                                                        <div key={index} className="text-sm">
+                                                                            {proc.name} {proc.quantity > 1 && `(${proc.quantity}x)`}
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            </TableCell>
+                                                            <TableCell>{getPriorityBadge(req.priority)}</TableCell>
+                                                            <TableCell>{format(req.receivedDate, "dd/MM/yyyy", { locale: ptBR })}</TableCell>
+                                                            <TableCell>{getStatusBadge(req.status)}</TableCell>
                                                             <TableCell>
                                                                 <Button
                                                                     variant="outline"
