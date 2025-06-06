@@ -189,6 +189,40 @@ export class RequisitionService {
         }
     }
 
+    static async getCanceledRequisitions(): Promise<Requisition[]> {
+        try {
+            const q = query(
+                collection(db, "requisitions"),
+                where("status", "in", ["CANCELADO", "CANCELADO_ARQUIVADO"]),
+                orderBy("updatedAt", "desc"),
+            )
+            const querySnapshot = await getDocs(q)
+
+            return querySnapshot.docs.map((doc) => {
+                const data = doc.data()
+                return {
+                    id: doc.id,
+                    protocol: data.protocol,
+                    patientName: data.patientName,
+                    procedures: data.procedures,
+                    priority: data.priority,
+                    susCard: data.susCard,
+                    receivedDate: data.receivedDate.toDate(),
+                    phones: data.phones,
+                    status: data.status,
+                    images: data.images,
+                    createdBy: data.createdBy,
+                    createdAt: data.createdAt?.toDate() || new Date(),
+                    updatedAt: data.updatedAt?.toDate() || new Date(),
+                    healthUnitId: data.healthUnitId,
+                } as Requisition
+            })
+        } catch (error) {
+            console.error("Erro ao buscar requisições canceladas:", error)
+            throw error
+        }
+    }
+
     static async getRequisition(id: string): Promise<Requisition | null> {
         return this.getRequisitionById(id)
     }
@@ -292,9 +326,9 @@ export class RequisitionService {
             // Criar entrada no histórico
             const historyEntry: SchedulingHistory = {
                 id: Date.now().toString(),
-                scheduledDate: data.scheduledDate,
-                scheduledLocation: data.scheduledLocation,
-                regulationType: data.regulationType,
+                scheduledDate: currentReq.scheduledDate || null,
+                scheduledLocation: currentReq.scheduledLocation || "",
+                regulationType: currentReq.regulationType || null,
                 hasCompanion: data.hasCompanion,
                 status: Status.AGENDADO,
                 reason: data.reason,
@@ -348,9 +382,9 @@ export class RequisitionService {
                 // Cancelamento
                 historyEntry = {
                     id: Date.now().toString(),
-                    scheduledDate: currentReq.scheduledDate,
-                    scheduledLocation: currentReq.scheduledLocation,
-                    regulationType: currentReq.regulationType,
+                    scheduledDate: currentReq.scheduledDate || null,
+                    scheduledLocation: currentReq.scheduledLocation || "",
+                    regulationType: currentReq.regulationType || null,
                     hasCompanion: currentReq.hasCompanion || false,
                     status: data.status as Status,
                     ...(data.reason && { reason: data.reason }),
@@ -375,9 +409,9 @@ export class RequisitionService {
                 // Resolicitação
                 historyEntry = {
                     id: Date.now().toString(),
-                    scheduledDate: currentReq.scheduledDate,
-                    scheduledLocation: currentReq.scheduledLocation,
-                    regulationType: currentReq.regulationType,
+                    scheduledDate: currentReq.scheduledDate || null,
+                    scheduledLocation: currentReq.scheduledLocation || "",
+                    regulationType: currentReq.regulationType || null,
                     hasCompanion: currentReq.hasCompanion || false,
                     status: data.status as Status,
                     ...(data.reason && { reason: data.reason }),
@@ -403,9 +437,9 @@ export class RequisitionService {
                 // Reagendamento
                 historyEntry = {
                     id: Date.now().toString(),
-                    scheduledDate: data.newScheduledDate,
-                    scheduledLocation: data.newScheduledLocation,
-                    regulationType: data.newRegulationType,
+                    scheduledDate: currentReq.scheduledDate || null,
+                    scheduledLocation: currentReq.scheduledLocation || "",
+                    regulationType: currentReq.regulationType || null,
                     hasCompanion: data.newHasCompanion || false,
                     status: Status.AGENDADO,
                     ...(data.reason && { reason: data.reason }),
@@ -434,9 +468,9 @@ export class RequisitionService {
                 // Outras atualizações de status
                 historyEntry = {
                     id: Date.now().toString(),
-                    scheduledDate: currentReq.scheduledDate,
-                    scheduledLocation: currentReq.scheduledLocation,
-                    regulationType: currentReq.regulationType,
+                    scheduledDate: currentReq.scheduledDate || null,
+                    scheduledLocation: currentReq.scheduledLocation || "",
+                    regulationType: currentReq.regulationType || null,
                     hasCompanion: currentReq.hasCompanion || false,
                     status: data.status as Status,
                     ...(data.reason && { reason: data.reason }),
