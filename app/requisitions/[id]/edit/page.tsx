@@ -30,8 +30,9 @@ import {
     REGULATION_TYPE_LABELS,
     STATUS_LABELS,
     STATUS_COLORS,
-    ActionType,
+    ActionType
 } from "@/types/requisitions"
+import { type UpdateSchedulingData } from "@/lib/requisition-service"
 import { UserRole } from "@/types/user"
 import Link from "next/link"
 import { ThemeToggle } from "@/components/theme-toggle"
@@ -122,11 +123,17 @@ function EditSchedulingForm() {
         try {
             setLoading(true)
 
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const updateData: any = {
+            // Start with a base object
+            const updateData: Partial<UpdateSchedulingData> = {
                 updatedBy: user?.uid || "",
-                reason: reason || undefined,
-                cancelReason: cancelReason || undefined,
+            }
+
+            // Conditionally add fields only if they have a value
+            if (reason) {
+                updateData.reason = reason
+            }
+            if (cancelReason) {
+                updateData.cancelReason = cancelReason
             }
 
             switch (action) {
@@ -143,7 +150,7 @@ function EditSchedulingForm() {
                     updateData.status = Status.REALIZADO
                     break
                 case "reschedule":
-                    // Combinar data e hora
+                    // ... (your reschedule logic)
                     const [hours, minutes] = newScheduledTime.split(":").map(Number)
                     const fullScheduledDate = new Date(newScheduledDate)
                     fullScheduledDate.setHours(hours, minutes)
@@ -156,7 +163,10 @@ function EditSchedulingForm() {
                     break
             }
 
-            await RequisitionService.updateScheduling(requisitionId, updateData)
+            await RequisitionService.updateScheduling(
+                requisitionId,
+                updateData as UpdateSchedulingData
+            )
 
             router.push("/requisitions")
         } catch (error) {
