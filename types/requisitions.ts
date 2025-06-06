@@ -34,9 +34,9 @@ export interface ImageFile {
 
 export interface SchedulingHistory {
     id: string
-    scheduledDate?: Date
+    scheduledDate?: Date | null
     scheduledLocation?: string
-    regulationType?: RegulationType
+    regulationType?: RegulationType | null
     hasCompanion: boolean
     status: Status
     reason?: string // Motivo da alteração
