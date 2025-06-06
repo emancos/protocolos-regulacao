@@ -16,6 +16,7 @@ import { type Requisition, Status, Priority, PRIORITY_LABELS, STATUS_LABELS, STA
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
 import { useUser } from "@/contexts/user-context"
+import { ImageWithFallback } from "@/components/Image-with-fallback"
 
 export default function RequisitionDetailPage() {
     return (
@@ -269,23 +270,10 @@ function RequisitionDetail() {
                                                     <div key={index} className="relative group">
                                                         <a href={image.url} target="_blank" rel="noopener noreferrer">
                                                             <div className="aspect-square rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800">
-                                                                <img
-                                                                    src={image.url || "/placeholder.svg"}
+                                                                <ImageWithFallback
+                                                                    src={image.url}
                                                                     alt={image.name}
-                                                                    className="w-full h-full object-cover transition-transform group-hover:scale-105"
-                                                                    onError={(e) => {
-                                                                        // Fallback para ícone se a imagem falhar ao carregar
-                                                                        e.currentTarget.style.display = "none"
-                                                                        const parent = e.currentTarget.parentElement
-                                                                        if (parent) {
-                                                                            const icon = document.createElement("div")
-                                                                            icon.className = "flex items-center justify-center h-full w-full"
-                                                                            icon.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                      </svg>`
-                                                                            parent.appendChild(icon)
-                                                                        }
-                                                                    }}
+                                                                    className="transition-transform group-hover:scale-105"
                                                                 />
                                                             </div>
                                                             <div className="mt-2">
