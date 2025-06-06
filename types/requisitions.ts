@@ -112,3 +112,5 @@ export const STATUS_COLORS = {
 }
 
 export type ActionType = "cancel" | "archive" | "reschedule" | "resolicit" | "complete" | "";
+
+export type UpdateDataValue = string | Date | boolean | Status;
