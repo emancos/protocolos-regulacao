@@ -100,6 +100,7 @@ export class RequisitionService {
         susCard: string,
         procedures: ProcedureItem[],
     ): Promise<{
+        [x: string]: any
         hasDuplicate: boolean
         duplicates: Array<{ procedure: string; protocol: string; status: string }>
     }> {
