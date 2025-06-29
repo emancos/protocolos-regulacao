@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useEffect, useReducer } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/contexts/auth-context"
 import { AuthGuard } from "@/components/auth-guard"
@@ -22,12 +22,106 @@ import { CalendarIcon, Plus, Trash2, ArrowLeft, AlertTriangle } from "lucide-rea
 import { cn } from "@/lib/utils"
 import { RequisitionService } from "@/lib/requisition-service"
 import { Priority, Status, PRIORITY_LABELS } from "@/types/requisitions"
-import { HEALTH_UNITS, HEALTH_AGENTS, type HealthUnit, type HealthAgent } from "@/types/health-units"
+import { HEALTH_UNITS, HEALTH_AGENTS, type HealthAgent } from "@/types/health-units"
 import Link from "next/link"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { ProcedureSelector } from "@/components/procedure-selector"
 import { ImageUpload } from "@/components/image-upload"
-import type { ProcedureItem } from "@/types/procedures"
+import type { ProcedureItem } from "@/types/procedures";
+
+// Interface para o estado completo do formulário
+interface FormState {
+    protocol: string;
+    patientName: string;
+    priority: Priority;
+    susCard: string;
+    receivedDate: Date;
+    phones: string[];
+    status: Status;
+    healthUnitId: string;
+    healthAgentId: string;
+    procedures: ProcedureItem[];
+    images: ImageFile[];
+    availableAgents: HealthAgent[];
+    loading: boolean;
+    error: string;
+    duplicateWarning: string;
+}
+
+// União de todos os tipos de ações possíveis
+type FormAction =
+    | { type: 'SET_FIELD'; field: keyof Omit<FormState, 'phones' | 'procedures' | 'images'>; payload: unknown }
+    | { type: 'SET_PROTOCOL'; payload: string }
+    | { type: 'SET_PHONES'; payload: string[] }
+    | { type: 'ADD_PHONE' }
+    | { type: 'REMOVE_PHONE'; payload: number }
+    | { type: 'UPDATE_PHONE'; payload: { index: number; value: string } }
+    | { type: 'SET_PROCEDURES'; payload: ProcedureItem[] }
+    | { type: 'SET_IMAGES'; payload: ImageFile[] }
+    | { type: 'SET_AVAILABLE_AGENTS'; payload: HealthAgent[] }
+    | { type: 'RESET_AGENTS' }
+    | { type: 'SET_LOADING'; payload: boolean }
+    | { type: 'SET_ERROR'; payload: string }
+    | { type: 'SET_DUPLICATE_WARNING'; payload: string }
+    | { type: 'RESET_FORM' };
+
+const initialState: FormState = {
+    protocol: "",
+    patientName: "",
+    priority: Priority.P3,
+    susCard: "",
+    receivedDate: new Date(),
+    phones: [""],
+    status: Status.PENDENTE,
+    healthUnitId: "",
+    healthAgentId: "",
+    procedures: [],
+    images: [],
+    availableAgents: [],
+    loading: false,
+    error: "",
+    duplicateWarning: "",
+      };
+
+function formReducer(state: FormState, action: FormAction): FormState {
+    switch (action.type) {
+        case 'SET_FIELD':
+            return { ...state, [action.field]: action.payload };
+        case 'SET_PROTOCOL':
+            return { ...state, protocol: action.payload, loading: false };
+        case 'SET_PHONES':
+            return { ...state, phones: action.payload };
+        case 'ADD_PHONE':
+            return { ...state, phones: [...state.phones, ""] };
+        case 'REMOVE_PHONE':
+            const newPhones = [...state.phones];
+            newPhones.splice(action.payload, 1);
+            return { ...state, phones: newPhones };
+        case 'UPDATE_PHONE':
+            const updatedPhones = [...state.phones];
+            updatedPhones[action.payload.index] = action.payload.value;
+            return { ...state, phones: updatedPhones };
+        case 'SET_PROCEDURES':
+            return { ...state, procedures: action.payload };
+        case 'SET_IMAGES':
+            return { ...state, images: action.payload };
+        case 'SET_AVAILABLE_AGENTS':
+            return { ...state, availableAgents: action.payload };
+        case 'RESET_AGENTS':
+            return { ...state, availableAgents: [], healthAgentId: "" };
+        case 'SET_LOADING':
+            return { ...state, loading: action.payload };
+        case 'SET_ERROR':
+            return { ...state, error: action.payload, loading: false };
+        case 'SET_DUPLICATE_WARNING':
+            return { ...state, duplicateWarning: action.payload };
+        case 'RESET_FORM':
+            return { ...initialState, protocol: state.protocol }; // Mantém o protocolo gerado
+        default:
+            const _exhaustiveCheck: never = action;
+            throw new Error(`Ação do reducer não tratada: ${(_exhaustiveCheck as { type: string }).type}`);
+    }
+}
 
 interface ImageFile {
     id: string
@@ -54,107 +148,74 @@ function NewRequisitionForm() {
     const { user } = useAuth()
     const router = useRouter()
 
-    const [protocol, setProtocol] = useState("")
-    const [patientName, setPatientName] = useState("")
-    const [priority, setPriority] = useState<Priority>(Priority.P3)
-    const [susCard, setSusCard] = useState("")
-    const [receivedDate, setReceivedDate] = useState<Date>(new Date())
-    const [phones, setPhones] = useState<string[]>([""])
-    const [status, setStatus] = useState<Status>(Status.PENDENTE)
-    const [healthUnitId, setHealthUnitId] = useState("")
-    const [healthAgentId, setHealthAgentId] = useState("")
-    const [loading, setLoading] = useState(false)
-    const [error, setError] = useState("")
-    const [duplicateWarning, setDuplicateWarning] = useState<string>("")
-    const [procedures, setProcedures] = useState<ProcedureItem[]>([])
-    const [images, setImages] = useState<ImageFile[]>([])
+    const [state, dispatch] = useReducer(formReducer, initialState);
 
-    // Estados derivados
-    const [availableAgents, setAvailableAgents] = useState<HealthAgent[]>([])
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const [selectedHealthUnit, setSelectedHealthUnit] = useState<HealthUnit | null>(null)
+    const {
+        protocol, patientName, priority, susCard, receivedDate, phones, status,
+        healthUnitId, healthAgentId, procedures, images, availableAgents,
+        loading, error, duplicateWarning
+    } = state;
 
     // Gerar protocolo ao carregar a página
     useEffect(() => {
         const generateInitialProtocol = async () => {
             try {
                 const newProtocol = await RequisitionService.generateProtocol()
-                setProtocol(newProtocol)
+                dispatch({ type: 'SET_PROTOCOL', payload: newProtocol });
                 console.log(`📋 Generated initial protocol: ${newProtocol}`)
             } catch (error) {
                 console.error("Erro ao gerar protocolo inicial:", error)
-                setError("Erro ao gerar protocolo automático")
+                dispatch({ type: 'SET_ERROR', payload: "Erro ao gerar protocolo automático" });
             }
         }
+        generateInitialProtocol();
+    }, []);
 
-        generateInitialProtocol()
-    }, [])
-
-    // Substituir o useEffect que gerenciava PSFs:
+    // Gerenciar agentes de saúde quando a unidade de saúde muda
     useEffect(() => {
         if (healthUnitId) {
             const unit = HEALTH_UNITS.find((u) => u.id === healthUnitId)
-            setSelectedHealthUnit(unit || null)
-
-            // Carregar agentes diretamente da unidade de saúde
             const agents = HEALTH_AGENTS.filter((a) => a.healthUnitId === healthUnitId)
-            setAvailableAgents(agents)
+            dispatch({ type: 'SET_AVAILABLE_AGENTS', payload: agents });
             console.log(`Found ${agents.length} agents for unit ${unit?.name}`)
 
-            // Se não houver agentes, limpar o campo de agente selecionado
             if (agents.length === 0) {
-                setHealthAgentId("")
+                dispatch({ type: 'SET_FIELD', field: 'healthAgentId', payload: "" });
             }
         } else {
-            setSelectedHealthUnit(null)
-            setAvailableAgents([])
-            setHealthAgentId("")
+            dispatch({ type: 'RESET_AGENTS' });
         }
-    }, [healthUnitId])
+    }, [healthUnitId]);
 
-    // Verificar procedimentos duplicados quando cartão SUS ou procedimentos mudam
+    // Verificar procedimentos duplicados
     useEffect(() => {
         const checkDuplicates = async () => {
             if (susCard && procedures.length > 0) {
                 try {
                     const result = await RequisitionService.checkDuplicateProcedures(susCard, procedures)
                     if (result.hasDuplicate) {
-                        const duplicateList = result.map((d: { procedure: string; protocol: string; status: string }) => `• ${d.procedure} (Protocolo: ${d.protocol}, Status: ${d.status})`)
-                            .join("\n")
-                        setDuplicateWarning(
-                            `⚠️ ATENÇÃO: Este cartão SUS já possui solicitações pendentes para os seguintes procedimentos:\n\n${duplicateList}\n\nO paciente deve aguardar o agendamento das solicitações anteriores.`,
-                        )
+                        const duplicateList = result.map((d: { procedure: string; protocol: string; status: string }) => `• ${d.procedure} (Protocolo: ${d.protocol}, Status: ${d.status})`).join("\n");
+                        const warningMessage = `⚠️ ATENÇÃO: Este cartão SUS já possui solicitações pendentes para os seguintes procedimentos:\n\n${duplicateList}\n\nO paciente deve aguardar o agendamento das solicitações anteriores.`;
+                        dispatch({ type: 'SET_DUPLICATE_WARNING', payload: warningMessage });
                     } else {
-                        setDuplicateWarning("")
+                        dispatch({ type: 'SET_DUPLICATE_WARNING', payload: "" });
                     }
                 } catch (error) {
                     console.error("Erro ao verificar duplicatas:", error)
                 }
             } else {
-                setDuplicateWarning("")
+                dispatch({ type: 'SET_DUPLICATE_WARNING', payload: "" });
             }
         }
 
         const timeoutId = setTimeout(checkDuplicates, 500) // Debounce
         return () => clearTimeout(timeoutId)
-    }, [susCard, procedures])
+    }, [susCard, procedures]);
 
-    const addPhoneField = () => {
-        setPhones([...phones, ""])
-    }
-
-    const removePhoneField = (index: number) => {
-        const newPhones = [...phones]
-        newPhones.splice(index, 1)
-        setPhones(newPhones)
-    }
-
-    const updatePhone = (index: number, value: string) => {
-        const newPhones = [...phones]
-        newPhones[index] = value
-        setPhones(newPhones)
-    }
-
+    const addPhoneField = () => dispatch({ type: 'ADD_PHONE' });
+    const removePhoneField = (index: number) => dispatch({ type: 'REMOVE_PHONE', payload: index });
+    const updatePhone = (index: number, value: string) => dispatch({ type: 'UPDATE_PHONE', payload: { index, value } });
+    
     // Simplificar a validação:
     const validateForm = (): string | null => {
         if (!protocol) return "Protocolo é obrigatório"
@@ -183,15 +244,12 @@ function NewRequisitionForm() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
-        setError("")
+        dispatch({ type: 'SET_ERROR', payload: "" });
 
-        console.log("🚀 Starting form submission...")
-
-        // Validar formulário
-        const validationError = validateForm()
+        const validationError = validateForm();
         if (validationError) {
-            setError(validationError)
-            return
+            dispatch({ type: 'SET_ERROR', payload: validationError });
+            return;
         }
 
         // Verificar se há imagens não enviadas
@@ -200,10 +258,11 @@ function NewRequisitionForm() {
 
         console.log(`📊 Image check - Pending: ${pendingImages.length}, Uploading: ${uploadingImages.length}`)
 
-        if (pendingImages.length > 0 || uploadingImages.length > 0) {
-            setError(
-                `Aguarde o upload de todas as imagens ser concluído. ${pendingImages.length} pendente(s), ${uploadingImages.length} enviando...`,
-            )
+        if (pendingImages.length > 0 || uploadingImages.length > 0) {            
+            dispatch({ 
+                type: 'SET_ERROR', 
+                payload: `Aguarde o upload de todas as imagens ser concluído. ${pendingImages.length} pendente(s), ${uploadingImages.length} enviando...` 
+            });
             return
         }
 
@@ -211,7 +270,7 @@ function NewRequisitionForm() {
         const filteredPhones = phones.filter((phone) => phone.trim() !== "")
 
         try {
-            setLoading(true)
+            dispatch({ type: 'SET_LOADING', payload: true });
 
             // Preparar dados das imagens (apenas as que foram enviadas com sucesso)
             const imageData = images
@@ -254,9 +313,9 @@ function NewRequisitionForm() {
             router.push("/requisitions")
         } catch (error) {
             console.error("Erro ao criar requisição:", error)
-            setError("Erro ao criar requisição. Tente novamente.")
+            dispatch({ type: 'SET_ERROR', payload: "Erro ao criar requisição. Tente novamente." });
         } finally {
-            setLoading(false)
+            dispatch({ type: 'SET_LOADING', payload: false });
         }
     }
 
@@ -342,7 +401,7 @@ function NewRequisitionForm() {
                                                 <Calendar
                                                     mode="single"
                                                     selected={receivedDate}
-                                                    onSelect={(date) => date && setReceivedDate(date)}
+                                                    onSelect={(date) => dispatch({ type: 'SET_FIELD', field: 'receivedDate', payload: date })}
                                                     initialFocus
                                                     locale={ptBR}
                                                 />
@@ -355,7 +414,7 @@ function NewRequisitionForm() {
                                         <Input
                                             id="patientName"
                                             value={patientName}
-                                            onChange={(e) => setPatientName(e.target.value)}
+                                            onChange={(e) => dispatch({ type: 'SET_FIELD', field: 'patientName', payload: e.target.value })}
                                             placeholder="Nome completo do paciente"
                                             required
                                         />
@@ -367,7 +426,7 @@ function NewRequisitionForm() {
                                             id="susCard"
                                             mask="999.9999.9999.9999"
                                             value={susCard}
-                                            onChange={(e) => setSusCard(e.target.value)}
+                                            onChange={(e) => dispatch({ type: 'SET_FIELD', field: 'susCard', payload: e.target.value })}
                                             placeholder="000.0000.0000.0000"
                                             required
                                         />
@@ -375,7 +434,7 @@ function NewRequisitionForm() {
 
                                     <div className="space-y-2">
                                         <Label htmlFor="priority">Prioridade *</Label>
-                                        <Select value={priority} onValueChange={(value) => setPriority(value as Priority)}>
+                                        <Select value={priority} onValueChange={(value) => dispatch({ type: 'SET_FIELD', field: 'priority', payload: value as Priority })}>
                                             <SelectTrigger>
                                                 <SelectValue placeholder="Selecione a prioridade" />
                                             </SelectTrigger>
@@ -390,17 +449,8 @@ function NewRequisitionForm() {
                                     </div>
 
                                     <div className="space-y-2">
-                                        <Label htmlFor="status">Status *</Label>
-                                        <Select value={status} onValueChange={(value) => setStatus(value as Status)}>
-                                            <SelectTrigger>
-                                                <SelectValue placeholder="Selecione o status" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value={Status.PENDENTE}>Pendente</SelectItem>
-                                                <SelectItem value={Status.SIS_PENDENTE}>SIS Pendente</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
+                                        <Label htmlFor="status">Status PENDENTE*</Label>
+                                    </div>                                     
 
                                     {/* Unidade de Saúde e PSF */}
                                     <div className="space-y-4 md:col-span-2">
@@ -410,7 +460,7 @@ function NewRequisitionForm() {
 
                                     <div className="space-y-2">
                                         <Label htmlFor="healthUnit">Unidade de Saúde *</Label>
-                                        <Select value={healthUnitId} onValueChange={setHealthUnitId}>
+                                        <Select value={healthUnitId} onValueChange={(value) => dispatch({ type: 'SET_FIELD', field: 'healthUnitId', payload: value })}>
                                             <SelectTrigger>
                                                 <SelectValue placeholder="Selecione a unidade de saúde" />
                                             </SelectTrigger>
@@ -428,7 +478,7 @@ function NewRequisitionForm() {
                                     {healthUnitId && availableAgents.length > 0 && (
                                         <div className="space-y-2">
                                             <Label htmlFor="healthAgent">Agente de Saúde *</Label>
-                                            <Select value={healthAgentId} onValueChange={setHealthAgentId}>
+                                            <Select value={healthAgentId} onValueChange={(value) => dispatch({ type: 'SET_FIELD', field: 'healthAgentId', payload: value })}>
                                                 <SelectTrigger>
                                                     <SelectValue placeholder="Selecione o agente de saúde" />
                                                 </SelectTrigger>
@@ -445,7 +495,7 @@ function NewRequisitionForm() {
 
                                     {/* Procedimentos */}
                                     <div className="space-y-4 md:col-span-2">
-                                        <ProcedureSelector procedures={procedures} onChange={setProcedures} />
+                                        <ProcedureSelector procedures={procedures} onChange={(newProcedures) => dispatch({ type: 'SET_PROCEDURES', payload: newProcedures })} />
                                     </div>
 
                                     {/* Telefones */}
@@ -495,7 +545,7 @@ function NewRequisitionForm() {
                                     <div className="space-y-4 md:col-span-2">
                                         <ImageUpload
                                             images={images}
-                                            onChange={setImages}
+                                            onChange={(newImages) => dispatch({ type: 'SET_IMAGES', payload: newImages })}
                                             protocol={protocol}
                                             maxImages={10}
                                             maxSizePerImage={10}
