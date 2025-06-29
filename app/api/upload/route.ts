@@ -67,25 +67,45 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
     try {
-        // 1. Obter o ID do arquivo do corpo da requisição
         const { oneDriveId } = await request.json();
 
         if (!oneDriveId) {
             return NextResponse.json({ success: false, error: "OneDrive file ID is required" }, { status: 400 });
         }
 
-        console.log(`🗑️ Received request to delete file from OneDrive: ${oneDriveId}`);
+        console.log(`🗑️ Received request to delete file: ${oneDriveId}`);
 
-        // 2. Chamar o serviço para deletar a imagem
+        // 1. Obter o ID da pasta pai *antes* de deletar o arquivo
+        const parentFolderId = await OneDriveService.getFileParentId(oneDriveId);
+
+        // 2. Deletar a imagem
         await OneDriveService.deleteImage(oneDriveId);
+        console.log(`✅ File ${oneDriveId} deleted from OneDrive.`);
 
-        console.log(`✅ File ${oneDriveId} deleted successfully from OneDrive.`);
+        // 3. Se o arquivo estava dentro de uma pasta (e não na raiz)...
+        if (parentFolderId) {
+            console.log(`👀 Checking if parent folder ${parentFolderId} is empty...`);
 
-        // 3. Retornar uma resposta de sucesso
-        return NextResponse.json({ success: true, message: "File deleted successfully" });
+            // 4. Listar os itens restantes na pasta
+            const remainingItems = await OneDriveService.listFolderChildren(parentFolderId);
+
+            // 5. Se a pasta estiver vazia, delete-a também
+            if (remainingItems.length === 0) {
+                console.log(`📂 Parent folder ${parentFolderId} is empty. Deleting it...`);
+                // Usamos 'deleteImage' pois para a API, pastas são 'items' como arquivos.
+                await OneDriveService.deleteImage(parentFolderId);
+                console.log(`✅ Parent folder ${parentFolderId} deleted.`);
+            } else {
+                console.log(`➡️ Parent folder ${parentFolderId} is not empty, will not be deleted.`);
+            }
+        } else {
+            console.log("➡️ File was in root or parent could not be determined. No folder to delete.");
+        }
+
+        return NextResponse.json({ success: true, message: "File deleted and folder checked successfully" });
 
     } catch (error) {
-        console.error("❌ Failed to delete file from OneDrive:", error);
+        console.error("❌ Failed during delete process:", error);
         return NextResponse.json(
             {
                 success: false,

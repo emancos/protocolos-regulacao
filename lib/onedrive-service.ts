@@ -349,4 +349,44 @@ export class OneDriveService {
             }
         }
     }
+
+    static async getFileParentId(fileId: string, accessToken?: string): Promise<string | null> {
+        const token = accessToken || await this.getAccessToken();
+        const url = `${this.GRAPH_API_BASE}/me/drive/items/${fileId}?$select=parentReference`;
+
+        console.log(`🔎 Getting parent folder ID for file: ${fileId}`);
+        const response = await fetch(url, {
+            headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (!response.ok) {
+            console.error(`❌ Failed to get file metadata for ${fileId}`);
+            // Não lançar um erro, pois o arquivo pode já ter sido excluído.
+            return null;
+        }
+
+        const data = await response.json();
+        // A pasta raiz não tem um 'id' em parentReference, mas sim em 'path'.
+        // Retornamos o id apenas se ele existir, indicando que não é a raiz.
+        return data.parentReference?.id || null;
+    }
+    
+    static async listFolderChildren(folderId: string, accessToken?: string): Promise<any[]> {
+        const token = accessToken || await this.getAccessToken();
+        const url = `${this.GRAPH_API_BASE}/me/drive/items/${folderId}/children?$select=id`;
+
+        console.log(`🔎 Listing children for folder: ${folderId}`);
+        const response = await fetch(url, {
+            headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (!response.ok) {
+            console.error(`❌ Failed to list children for folder ${folderId}`);
+            // Retorna um array não vazio para evitar a exclusão em caso de erro
+            return [{}];
+        }
+
+        const data = await response.json();
+        return data.value || [];
+    }
 }
