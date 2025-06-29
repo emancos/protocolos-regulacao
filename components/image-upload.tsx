@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -40,83 +40,7 @@ export function ImageUpload({ images, onChange, protocol, maxImages = 10, maxSiz
     const [lastProtocol, setLastProtocol] = useState<string | undefined>(undefined)
     const fileInputRef = useRef<HTMLInputElement>(null)
 
-    // Upload automático apenas quando protocolo muda (não quando é definido pela primeira vez)
-    useEffect(() => {
-        if (protocol && protocol !== lastProtocol && lastProtocol !== undefined) {
-            const pendingImages = images.filter((img) => img.file && !img.uploaded && !img.uploading && !img.error)
-            if (pendingImages.length > 0) {
-                console.log(
-                    `🔄 Protocol changed from "${lastProtocol}" to "${protocol}", auto-uploading ${pendingImages.length} pending images`,
-                )
-                uploadImages(pendingImages, images)
-            }
-        }
-        setLastProtocol(protocol)
-    }, [protocol])
-
-    const handleFiles = async (files: FileList | null) => {
-        if (!files) return
-
-        setError("")
-        const newImages: ImageFile[] = []
-        const maxSizeBytes = maxSizePerImage * 1024 * 1024
-
-        Array.from(files).forEach((file) => {
-            // Verificar se é uma imagem
-            if (!file.type.startsWith("image/")) {
-                setError("Apenas arquivos de imagem são permitidos")
-                return
-            }
-
-            // Verificar tamanho do arquivo
-            if (file.size > maxSizeBytes) {
-                setError(`Arquivo ${file.name} é muito grande. Máximo ${maxSizePerImage}MB por imagem`)
-                return
-            }
-
-            // Verificar se já existe
-            if (images.some((img) => img.name === file.name && img.size === file.size)) {
-                return
-            }
-
-            // Criar preview
-            const preview = URL.createObjectURL(file)
-            const imageFile: ImageFile = {
-                id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
-                file,
-                preview,
-                name: file.name,
-                size: file.size,
-                uploaded: false,
-                uploading: false,
-            }
-
-            newImages.push(imageFile)
-        })
-
-        // Verificar limite total
-        const totalImages = images.length + newImages.length
-        if (totalImages > maxImages) {
-            setError(`Máximo de ${maxImages} imagens permitidas`)
-            return
-        }
-
-        const updatedImages = [...images, ...newImages]
-        onChange(updatedImages)
-
-        console.log(`📁 Added ${newImages.length} new images. Protocol: ${protocol || "not set"}`)
-
-        // NÃO fazer upload automático aqui - apenas quando o usuário clicar no botão manual
-        // ou quando o protocolo for definido pela primeira vez
-        if (protocol && newImages.length > 0) {
-            console.log(`🚀 Protocol is set (${protocol}), starting auto-upload for ${newImages.length} new images`)
-            await uploadImages(newImages, updatedImages)
-        } else if (!protocol) {
-            console.log("⏳ Protocol not set, upload will happen when protocol is available")
-        }
-    }
-
-    const uploadImages = async (imagesToUpload: ImageFile[], allImages: ImageFile[]) => {
+    const uploadImages = useCallback(async (imagesToUpload: ImageFile[], allImages: ImageFile[]) => {
         if (!protocol) {
             setError("Protocolo é necessário para fazer upload")
             return
@@ -222,6 +146,82 @@ export function ImageUpload({ images, onChange, protocol, maxImages = 10, maxSiz
             setError(error instanceof Error ? error.message : "Erro no upload das imagens")
         } finally {
             setUploading(false)
+        }
+    }, [protocol, onChange, setError]);
+
+    // Upload automático apenas quando protocolo muda (não quando é definido pela primeira vez)
+    useEffect(() => {
+        if (protocol && protocol !== lastProtocol && lastProtocol !== undefined) {
+            const pendingImages = images.filter((img) => img.file && !img.uploaded && !img.uploading && !img.error)
+            if (pendingImages.length > 0) {
+                console.log(
+                    `🔄 Protocol changed from "${lastProtocol}" to "${protocol}", auto-uploading ${pendingImages.length} pending images`,
+                )
+                uploadImages(pendingImages, images)
+            }
+        }
+        setLastProtocol(protocol)
+    }, [protocol, images, lastProtocol, uploadImages])
+
+    const handleFiles = async (files: FileList | null) => {
+        if (!files) return
+
+        setError("")
+        const newImages: ImageFile[] = []
+        const maxSizeBytes = maxSizePerImage * 1024 * 1024
+
+        Array.from(files).forEach((file) => {
+            // Verificar se é uma imagem
+            if (!file.type.startsWith("image/")) {
+                setError("Apenas arquivos de imagem são permitidos")
+                return
+            }
+
+            // Verificar tamanho do arquivo
+            if (file.size > maxSizeBytes) {
+                setError(`Arquivo ${file.name} é muito grande. Máximo ${maxSizePerImage}MB por imagem`)
+                return
+            }
+
+            // Verificar se já existe
+            if (images.some((img) => img.name === file.name && img.size === file.size)) {
+                return
+            }
+
+            // Criar preview
+            const preview = URL.createObjectURL(file)
+            const imageFile: ImageFile = {
+                id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+                file,
+                preview,
+                name: file.name,
+                size: file.size,
+                uploaded: false,
+                uploading: false,
+            }
+
+            newImages.push(imageFile)
+        })
+
+        // Verificar limite total
+        const totalImages = images.length + newImages.length
+        if (totalImages > maxImages) {
+            setError(`Máximo de ${maxImages} imagens permitidas`)
+            return
+        }
+
+        const updatedImages = [...images, ...newImages]
+        onChange(updatedImages)
+
+        console.log(`📁 Added ${newImages.length} new images. Protocol: ${protocol || "not set"}`)
+
+        // NÃO fazer upload automático aqui - apenas quando o usuário clicar no botão manual
+        // ou quando o protocolo for definido pela primeira vez
+        if (protocol && newImages.length > 0) {
+            console.log(`🚀 Protocol is set (${protocol}), starting auto-upload for ${newImages.length} new images`)
+            await uploadImages(newImages, updatedImages)
+        } else if (!protocol) {
+            console.log("⏳ Protocol not set, upload will happen when protocol is available")
         }
     }
 
