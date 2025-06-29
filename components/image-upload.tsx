@@ -9,6 +9,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Upload, X, FileImage, CheckCircle, AlertCircle, RefreshCw } from "lucide-react"
 import { cn } from "@/lib/utils"
 
+import Image from "next/image";
+
 interface ImageFile {
     id: string
     file?: File
@@ -18,7 +20,9 @@ interface ImageFile {
     url?: string
     uploaded?: boolean
     uploading?: boolean
-    error?: string
+    deleting?: boolean;
+    error?: string;
+    oneDriveId?: string;
 }
 
 interface ImageUploadProps {
@@ -138,8 +142,9 @@ export function ImageUpload({ images, onChange, protocol, maxImages = 10, maxSiz
             const formData = new FormData()
             imagesToUpload.forEach((img) => {
                 if (img.file) {
-                    formData.append("files", img.file)
-                    console.log(`📎 Added file to form data: ${img.name}`)
+                    const newFileName = `${img.id}___${img.file.name}`
+                    formData.append("files", img.file, newFileName)
+                    console.log(`📎 Added file to form data with unique name: ${newFileName}`)
                 }
             })
             formData.append("protocol", protocol)
@@ -174,18 +179,13 @@ export function ImageUpload({ images, onChange, protocol, maxImages = 10, maxSiz
 
             console.log("✅ Upload successful, received files:", result.files)
 
-            // Atualizar imagens com URLs do OneDrive
             const finalImages = allImages.map((img) => {
-                const uploadedFile = result.files.find(
-                    (f: { name: string; url: string; id: string }) =>
-                        f.name.includes(img.name.replace(/\.[^/.]+$/, "")) || // Remove extensão para comparação
-                        f.name.includes(img.name), // Ou nome completo
-                )
+                // A resposta da API agora inclui o 'clientId'
+                const uploadedFile = result.files.find((f: { clientId: string }) => f.clientId === img.id)
 
-                if (uploadedFile && imagesToUpload.some((upload) => upload.id === img.id)) {
+                if (uploadedFile) {
                     console.log(`✅ Mapping uploaded file: ${uploadedFile.name} -> ${img.name}`)
 
-                    // Limpar preview local
                     if (img.preview) {
                         URL.revokeObjectURL(img.preview)
                     }
@@ -204,7 +204,7 @@ export function ImageUpload({ images, onChange, protocol, maxImages = 10, maxSiz
             })
 
             onChange(finalImages)
-            setError("") // Limpar erro em caso de sucesso
+            setError("")
 
             const uploadedCount = finalImages.filter((img) => img.uploaded).length
             console.log(`✅ Upload completed. Total uploaded images: ${uploadedCount}`)
@@ -225,13 +225,48 @@ export function ImageUpload({ images, onChange, protocol, maxImages = 10, maxSiz
         }
     }
 
-    const removeImage = (id: string) => {
-        const imageToRemove = images.find((img) => img.id === id)
-        if (imageToRemove?.preview) {
-            URL.revokeObjectURL(imageToRemove.preview)
+    const removeImage = async (id: string) => {
+        const imageToRemove = images.find((img) => img.id === id);
+        if (!imageToRemove) return;
+
+        // Se o arquivo não foi enviado para o OneDrive, apenas remova-o localmente.
+        if (!imageToRemove.uploaded || !imageToRemove.oneDriveId) {
+            if (imageToRemove.preview) {
+                URL.revokeObjectURL(imageToRemove.preview);
+            }
+            onChange(images.filter((img) => img.id !== id));
+            return;
         }
-        onChange(images.filter((img) => img.id !== id))
-    }
+
+        // Se o arquivo está no OneDrive, chame a API para deletá-lo.
+        // 1. Marcar a imagem como "deleting" para dar feedback visual
+        onChange(images.map((img) => (img.id === id ? { ...img, deleting: true } : img)));
+
+        try {
+            const response = await fetch("/api/upload", {
+                method: "DELETE",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ oneDriveId: imageToRemove.oneDriveId }),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || "Falha ao deletar a imagem do OneDrive.");
+            }
+
+            // 2. Se a API retornou sucesso, remova a imagem da lista local.
+            onChange(images.filter((img) => img.id !== id));
+
+        } catch (error) {
+            console.error("Delete error:", error);
+            setError(error instanceof Error ? error.message : "Erro desconhecido.");
+
+            // 3. Se deu erro, reverter o estado "deleting"
+            onChange(images.map((img) => (img.id === id ? { ...img, deleting: false } : img)));
+        }
+    };
 
     const retryUpload = async (imageId: string) => {
         const imageToRetry = images.find((img) => img.id === imageId)
@@ -400,11 +435,16 @@ export function ImageUpload({ images, onChange, protocol, maxImages = 10, maxSiz
                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                             {images.map((image) => (
                                 <div key={image.id} className="relative group">
-                                    <div className="aspect-square rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800">
-                                        <img
+                                    <div className="relative aspect-square rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800">
+                                        <Image
                                             src={image.url || image.preview || "/placeholder.svg"}
                                             alt={image.name}
-                                            className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                                            fill // Faz a imagem preencher o contêiner pai
+                                            sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw" // melhora a performance
+                                            className={cn(
+                                                "object-cover transition-all group-hover:scale-105",
+                                                image.deleting && "opacity-50 blur-sm",
+                                            )}
                                         />
 
                                         {/* Status overlay */}
@@ -424,6 +464,12 @@ export function ImageUpload({ images, onChange, protocol, maxImages = 10, maxSiz
                                                     <AlertCircle className="h-4 w-4 text-white" />
                                                 </div>
                                             )}
+                                            {image.deleting && (
+                                                <div className="bg-black bg-opacity-50 rounded-full p-2">
+                                                    {/* Spinner (o mesmo do upload) */}
+                                                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white"></div>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
 
@@ -434,7 +480,7 @@ export function ImageUpload({ images, onChange, protocol, maxImages = 10, maxSiz
                                         size="icon"
                                         className="absolute -top-2 -right-2 h-6 w-6 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
                                         onClick={() => removeImage(image.id)}
-                                        disabled={image.uploading}
+                                        disabled={image.uploading || image.deleting}
                                     >
                                         <X className="h-3 w-3" />
                                     </Button>
