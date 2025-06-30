@@ -1,6 +1,7 @@
 "use client"
 
 import type React from "react"
+import { z } from "zod"
 
 import { useEffect, useReducer } from "react"
 import { useRouter } from "next/navigation"
@@ -44,7 +45,7 @@ interface FormState {
     images: ImageFile[];
     availableAgents: HealthAgent[];
     loading: boolean;
-    error: string;
+    errors: FormErrors;
     duplicateWarning: string;
 }
 
@@ -62,6 +63,8 @@ type FormAction =
     | { type: 'RESET_AGENTS' }
     | { type: 'SET_LOADING'; payload: boolean }
     | { type: 'SET_ERROR'; payload: string }
+    | { type: 'SET_ERRORS'; payload: FormErrors }
+    | { type: 'CLEAR_ERRORS' }
     | { type: 'SET_DUPLICATE_WARNING'; payload: string }
     | { type: 'RESET_FORM' };
 
@@ -79,9 +82,9 @@ const initialState: FormState = {
     images: [],
     availableAgents: [],
     loading: false,
-    error: "",
+    errors: {},
     duplicateWarning: "",
-      };
+};
 
 function formReducer(state: FormState, action: FormAction): FormState {
     switch (action.type) {
@@ -112,7 +115,11 @@ function formReducer(state: FormState, action: FormAction): FormState {
         case 'SET_LOADING':
             return { ...state, loading: action.payload };
         case 'SET_ERROR':
-            return { ...state, error: action.payload, loading: false };
+            return { ...state, errors: { ...state.errors, general: [action.payload] }, loading: false };
+        case 'SET_ERRORS':
+            return { ...state, errors: action.payload };
+        case 'CLEAR_ERRORS':
+            return { ...state, errors: {} };
         case 'SET_DUPLICATE_WARNING':
             return { ...state, duplicateWarning: action.payload };
         case 'RESET_FORM':
@@ -136,6 +143,74 @@ interface ImageFile {
     oneDriveId?: string
 }
 
+const requisitionSchema = z.object({
+    protocol: z.string().min(1, "Protocolo é obrigatório."),
+    patientName: z.string().trim().min(3, "Nome do paciente deve ter ao menos 3 caracteres."),
+    susCard: z.string().regex(/^\d{3}\.\d{4}\.\d{4}\.\d{4}$/, "Formato do Cartão SUS inválido."),
+    receivedDate: z.date({ required_error: "Data de recebimento é obrigatória." }),
+    priority: z.nativeEnum(Priority, { required_error: "Selecione uma prioridade." }),
+    status: z.nativeEnum(Status),
+    healthUnitId: z.string().min(1, "Unidade de Saúde é obrigatória."),
+    healthAgentId: z.string().optional(), // Será validado de forma condicional abaixo
+    procedures: z.array(z.object({
+        id: z.string(),
+        name: z.string(),
+    })).min(1, "Pelo menos um procedimento é obrigatório."),
+    phones: z.array(z.string()).min(1, "Pelo menos um telefone é obrigatório.")
+        .refine(phones => phones.some(phone => phone.trim() !== ""), {
+            message: "Pelo menos um telefone deve ser preenchido.",
+            // Aplicamos o erro no primeiro telefone para exibição
+            path: ["phones", 0],
+        }),
+
+    // Campos que não são do formulário, mas necessários para validação condicional
+    availableAgents: z.array(z.any()),
+    duplicateWarning: z.string().max(0, "Existem procedimentos duplicados. Verifique o aviso acima."),
+    images: z.array(z.object({
+        // Definimos a forma mínima de um ImageFile para o Zod entender
+        id: z.string(),
+        file: z.instanceof(File).optional(),
+        uploaded: z.boolean().optional(),
+        uploading: z.boolean().optional(),
+        error: z.string().optional(),
+    }))
+        .min(1, "É necessário anexar pelo menos uma imagem.")
+        .refine(images => {
+            // A validação falha se QUALQUER imagem estiver nestes estados:
+            const isAnyUploading = images.some(img => img.uploading);
+            const isAnyPending = images.some(img => img.file && !img.uploaded && !img.error);
+            const isAnyWithError = images.some(img => img.error);
+
+            // A validação PASSA se nenhuma imagem estiver pendente, enviando ou com erro.
+            return !isAnyUploading && !isAnyPending && !isAnyWithError;
+        }, {
+            // Esta é a mensagem de erro que será exibida.
+            message: "Aguarde a conclusão de todos os uploads ou remova as imagens com erro."
+        }),
+})
+    .superRefine((data, ctx) => {
+        // Validação condicional para o Agente de Saúde
+        if (data.availableAgents.length > 0 && !data.healthAgentId) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: "Agente de Saúde é obrigatório.",
+                path: ["healthAgentId"],
+            });
+        }
+    });
+
+// Extrai o tipo dos erros de campo do Zod para usar no nosso estado
+type FormErrors = z.inferFlattenedErrors<typeof requisitionSchema>['fieldErrors'] & {
+    general?: string[];
+};
+
+const FieldError = ({ messages }: { messages?: string[] }) => {
+    if (!messages || messages.length === 0) {
+        return null;
+    }
+    return <p className="text-sm font-medium text-destructive mt-1">{messages[0]}</p>;
+};
+
 export default function NewRequisitionPage() {
     return (
         <AuthGuard>
@@ -153,7 +228,7 @@ function NewRequisitionForm() {
     const {
         protocol, patientName, priority, susCard, receivedDate, phones, status,
         healthUnitId, healthAgentId, procedures, images, availableAgents,
-        loading, error, duplicateWarning
+        loading, duplicateWarning
     } = state;
 
     // Gerar protocolo ao carregar a página
@@ -215,59 +290,27 @@ function NewRequisitionForm() {
     const addPhoneField = () => dispatch({ type: 'ADD_PHONE' });
     const removePhoneField = (index: number) => dispatch({ type: 'REMOVE_PHONE', payload: index });
     const updatePhone = (index: number, value: string) => dispatch({ type: 'UPDATE_PHONE', payload: { index, value } });
-    
-    // Simplificar a validação:
-    const validateForm = (): string | null => {
-        if (!protocol) return "Protocolo é obrigatório"
-        if (!patientName.trim()) return "Nome do paciente é obrigatório"
-        if (!susCard.trim()) return "Cartão SUS é obrigatório"
-        if (!healthUnitId) return "Unidade de Saúde é obrigatória"
-
-        // Agente é obrigatório se houver agentes disponíveis
-        if (availableAgents.length > 0 && !healthAgentId) {
-            return "Agente de Saúde é obrigatório"
-        }
-
-        if (procedures.length === 0) return "Pelo menos um procedimento é obrigatório"
-
-        // Filtrar telefones vazios
-        const validPhones = phones.filter((phone) => phone.trim() !== "")
-        if (validPhones.length === 0) return "Pelo menos um telefone é obrigatório"
-
-        // Verificar se há duplicatas
-        if (duplicateWarning) {
-            return "Existem procedimentos duplicados para este cartão SUS. Verifique o aviso acima."
-        }
-
-        return null
-    }
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
-        dispatch({ type: 'SET_ERROR', payload: "" });
+        dispatch({ type: 'CLEAR_ERRORS' });
 
-        const validationError = validateForm();
-        if (validationError) {
-            dispatch({ type: 'SET_ERROR', payload: validationError });
+        const result = requisitionSchema.safeParse(state);
+
+        if (!result.success) {
+            const fieldErrors = result.error.flatten().fieldErrors;
+            dispatch({
+                type: 'SET_ERRORS',
+                payload: fieldErrors,
+            });
+            console.warn("Falha na validação:", fieldErrors);
             return;
         }
 
-        // Verificar se há imagens não enviadas
-        const pendingImages = images.filter((img) => !img.uploaded && !img.error && img.file)
-        const uploadingImages = images.filter((img) => img.uploading)
-
-        console.log(`📊 Image check - Pending: ${pendingImages.length}, Uploading: ${uploadingImages.length}`)
-
-        if (pendingImages.length > 0 || uploadingImages.length > 0) {            
-            dispatch({ 
-                type: 'SET_ERROR', 
-                payload: `Aguarde o upload de todas as imagens ser concluído. ${pendingImages.length} pendente(s), ${uploadingImages.length} enviando...` 
-            });
-            return
-        }
+        const validatedData = result.data;
 
         // Filtrar telefones vazios
-        const filteredPhones = phones.filter((phone) => phone.trim() !== "")
+        const filteredPhones = validatedData.phones.filter((phone) => phone.trim() !== "");
 
         try {
             dispatch({ type: 'SET_LOADING', payload: true });
@@ -289,15 +332,15 @@ function NewRequisitionForm() {
             // Criar a requisição com as URLs das imagens já carregadas no OneDrive
             await RequisitionService.createRequisition({
                 protocol,
-                patientName: patientName.trim(),
+                patientName: validatedData.patientName,
                 procedures,
                 priority,
-                susCard: susCard.trim(),
+                susCard: validatedData.susCard,
                 receivedDate,
                 phones: filteredPhones,
                 status,
                 healthUnitId,
-                healthAgentId: healthAgentId || undefined,
+                healthAgentId: validatedData.healthAgentId || undefined,
                 images: imageData.length > 0 ? imageData : undefined,
                 createdBy: user?.uid || "",
             })
@@ -347,19 +390,19 @@ function NewRequisitionForm() {
                                 Preencha todos os dados obrigatórios para cadastrar uma nova requisição de procedimento
                             </CardDescription>
                         </CardHeader>
-                        <form onSubmit={handleSubmit}>
+                        <form onSubmit={handleSubmit} noValidate>
                             <CardContent className="space-y-6 mb-6">
-                                {error && (
+                                {state.errors.general && (
                                     <Alert variant="destructive">
                                         <AlertTriangle className="h-4 w-4" />
-                                        <AlertDescription>{error}</AlertDescription>
+                                        <AlertDescription>{state.errors.general[0]}</AlertDescription>
                                     </Alert>
                                 )}
 
-                                {duplicateWarning && (
+                                {state.errors.duplicateWarning && (
                                     <Alert variant="destructive">
                                         <AlertTriangle className="h-4 w-4" />
-                                        <AlertDescription className="whitespace-pre-line">{duplicateWarning}</AlertDescription>
+                                        <AlertDescription>{state.errors.duplicateWarning[0]}</AlertDescription>
                                     </Alert>
                                 )}
 
@@ -418,6 +461,7 @@ function NewRequisitionForm() {
                                             placeholder="Nome completo do paciente"
                                             required
                                         />
+                                        <FieldError messages={state.errors.patientName} />
                                     </div>
 
                                     <div className="space-y-2">
@@ -430,6 +474,7 @@ function NewRequisitionForm() {
                                             placeholder="000.0000.0000.0000"
                                             required
                                         />
+                                        <FieldError messages={state.errors.susCard} />
                                     </div>
 
                                     <div className="space-y-2">
@@ -446,11 +491,12 @@ function NewRequisitionForm() {
                                                 ))}
                                             </SelectContent>
                                         </Select>
+                                        <FieldError messages={state.errors.priority} />
                                     </div>
 
                                     <div className="space-y-2">
                                         <Label htmlFor="status">Status PENDENTE*</Label>
-                                    </div>                                     
+                                    </div>
 
                                     {/* Unidade de Saúde e PSF */}
                                     <div className="space-y-4 md:col-span-2">
@@ -472,6 +518,7 @@ function NewRequisitionForm() {
                                                 ))}
                                             </SelectContent>
                                         </Select>
+                                        <FieldError messages={state.errors.healthUnitId} />
                                     </div>
 
                                     {/* Mostrar Agente de Saúde diretamente dependente da Unidade de Saúde */}
@@ -490,12 +537,17 @@ function NewRequisitionForm() {
                                                     ))}
                                                 </SelectContent>
                                             </Select>
+                                            <FieldError messages={state.errors.healthAgentId} />
                                         </div>
                                     )}
 
                                     {/* Procedimentos */}
                                     <div className="space-y-4 md:col-span-2">
-                                        <ProcedureSelector procedures={procedures} onChange={(newProcedures) => dispatch({ type: 'SET_PROCEDURES', payload: newProcedures })} />
+                                        <ProcedureSelector
+                                            procedures={procedures}
+                                            onChange={(newProcedures) => dispatch({ type: 'SET_PROCEDURES', payload: newProcedures })}
+                                            error={state.errors.procedures}
+                                        />
                                     </div>
 
                                     {/* Telefones */}
@@ -525,6 +577,7 @@ function NewRequisitionForm() {
                                                         placeholder="(00) 00000-0000"
                                                         required={index === 0}
                                                     />
+                                                    <FieldError messages={state.errors.phones} />
                                                 </div>
                                                 {index > 0 && (
                                                     <Button
@@ -549,6 +602,7 @@ function NewRequisitionForm() {
                                             protocol={protocol}
                                             maxImages={10}
                                             maxSizePerImage={10}
+                                            submissionError={state.errors.images}
                                         />
                                     </div>
                                 </div>

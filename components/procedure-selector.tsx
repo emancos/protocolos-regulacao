@@ -9,12 +9,20 @@ import { Plus, Trash2, Search } from "lucide-react"
 import { COMMON_PROCEDURES, type ProcedureItem } from "@/types/procedures"
 import { Separator } from "@/components/ui/separator"
 
+const FieldError = ({ messages }: { messages?: string[] }) => {
+    if (!messages || messages.length === 0) {
+        return null;
+    }
+    return <p className="text-sm font-medium text-destructive mt-2">{messages[0]}</p>;
+};
 interface ProcedureSelectorProps {
     procedures: ProcedureItem[]
     onChange: (procedures: ProcedureItem[]) => void
+    error?: string[]    
 }
 
-export function ProcedureSelector({ procedures, onChange }: ProcedureSelectorProps) {
+
+export function ProcedureSelector({ procedures, onChange, error }: ProcedureSelectorProps) {
     const [searchTerm, setSearchTerm] = useState("")
     const [customProcedure, setCustomProcedure] = useState("")
 
@@ -60,6 +68,8 @@ export function ProcedureSelector({ procedures, onChange }: ProcedureSelectorPro
                 )}
             </div>
             <Separator />
+
+            <FieldError messages={error} />
 
             {/* Lista de procedimentos selecionados */}
             {procedures.length > 0 && (
@@ -171,10 +181,6 @@ export function ProcedureSelector({ procedures, onChange }: ProcedureSelectorPro
                     </div>
                 </CardContent>
             </Card>
-
-            {procedures.length === 0 && (
-                <div className="text-center py-4 text-gray-500 text-sm">Selecione pelo menos um procedimento acima</div>
-            )}
         </div>
     )
 }

@@ -11,6 +11,13 @@ import { cn } from "@/lib/utils"
 
 import Image from "next/image";
 
+const FieldError = ({ messages }: { messages?: string[] }) => {
+    if (!messages || messages.length === 0) {
+        return null;
+    }
+    return <p className="text-sm font-medium text-destructive mt-2">{messages[0]}</p>;
+};
+
 interface ImageFile {
     id: string
     file?: File
@@ -30,10 +37,11 @@ interface ImageUploadProps {
     onChange: (images: ImageFile[]) => void
     protocol?: string
     maxImages?: number
-    maxSizePerImage?: number // em MB
+    maxSizePerImage?: number // em 
+    submissionError?: string[]
 }
 
-export function ImageUpload({ images, onChange, protocol, maxImages = 10, maxSizePerImage = 10 }: ImageUploadProps) {
+export function ImageUpload({ images, onChange, protocol, maxImages = 10, maxSizePerImage = 10, submissionError, }: ImageUploadProps) {
     const [dragActive, setDragActive] = useState(false)
     const [error, setError] = useState("")
     const [uploading, setUploading] = useState(false)
@@ -332,8 +340,11 @@ export function ImageUpload({ images, onChange, protocol, maxImages = 10, maxSiz
                         </span>
                     )}
                 </div>
-            </div>
-
+                
+            </div>           
+            
+            <FieldError messages={submissionError} />
+            
             {/* Status das imagens */}
             {images.length > 0 && (
                 <div className="flex items-center space-x-4 text-sm">
