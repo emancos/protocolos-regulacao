@@ -1,4 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { customAlphabet } from 'nanoid';
+import { format } from 'date-fns';
 import { db } from "./firebase"
 import {
     collection,
@@ -610,30 +612,40 @@ export class RequisitionService {
         }
     }
 
-    static async generateProtocol(): Promise<string> {
-        const today = new Date()
-        const year = today.getFullYear()
-        const month = String(today.getMonth() + 1).padStart(2, "0")
-        const day = String(today.getDate()).padStart(2, "0")
-        const datePrefix = `${year}${month}${day}`
+    static async generateUniqueProtocol(): Promise<string> {
+        // const prefix = 'REQ';
+        const datePart = format(new Date(), 'yyMMdd');
+        const MAX_RETRIES = 5; // Define um limite de segurança para as tentativas
 
-        // Buscar requisições com o mesmo prefixo de data
-        const q = query(
-            collection(db, "requisitions"),
-            where("protocol", ">=", datePrefix),
-            where("protocol", "<", datePrefix + "\uf8ff"),
-            orderBy("protocol", "desc"),
-        )
+        for (let i = 0; i < MAX_RETRIES; i++) {
+            // Gera um ID único com 7 caracteres. 
+            // A-Z, a-z, 0-9. Mais de 3 trilhões de combinações.
+            const nanoid = customAlphabet('1234567890', 10)
+            const uniquePart = nanoid(5);
+            const newProtocol = `${datePart}${uniquePart}`;
 
-        const querySnapshot = await getDocs(q)
-        let nextNumber = 1
+            const q = query(collection(db, "requisitions"), where("protocol", "==", `${newProtocol}`))
+            const existingProtocol = await getDocs(q)
+            const existingRequisition = existingProtocol.docs.map((doc) => {
+                const data = doc.data()
+                return {
+                    id: doc.id,
+                    protocol: data.protocol,
+                    patientName: data.patientName,
+                }
+            })
 
-        if (!querySnapshot.empty) {
-            const lastProtocol = querySnapshot.docs[0].data().protocol
-            const lastNumber = Number.parseInt(lastProtocol.substring(8), 10)
-            nextNumber = lastNumber + 1
+            // Se não existir, encontramos um protocolo único. Retorne-o.
+            if (existingRequisition.length == 0) {
+                console.log(`✅ Protocolo único gerado: ${newProtocol}`);
+                return newProtocol;
+            }
+
+            // Se existir (evento raríssimo), o loop continuará para tentar novamente.
+            console.warn(`Colisão de protocolo detectada: ${newProtocol}. Tentando novamente...`);
         }
 
-        return `${datePrefix}${String(nextNumber).padStart(4, "0")}`
+        // Se o loop terminar sem sucesso, lance um erro.
+        throw new Error('Não foi possível gerar um protocolo único após várias tentativas.');
     }
 }

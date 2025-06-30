@@ -235,7 +235,7 @@ function NewRequisitionForm() {
     useEffect(() => {
         const generateInitialProtocol = async () => {
             try {
-                const newProtocol = await RequisitionService.generateProtocol()
+                const newProtocol = await RequisitionService.generateUniqueProtocol()
                 dispatch({ type: 'SET_PROTOCOL', payload: newProtocol });
                 console.log(`📋 Generated initial protocol: ${newProtocol}`)
             } catch (error) {
