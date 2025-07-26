@@ -14,6 +14,11 @@ import {
     where,
     serverTimestamp,
     Timestamp,
+    limit,
+    startAfter,
+    QueryDocumentSnapshot,
+    DocumentData,
+    QueryConstraint
 } from "firebase/firestore"
 import { type Requisition, type Priority, type RegulationType, type ImageFile, type SchedulingHistory, Status } from "@/types/requisitions"
 import type { ProcedureItem } from "@/types/procedures"
@@ -71,7 +76,131 @@ export interface UpdateSchedulingData {
     newHasCompanion?: boolean
 }
 
+export interface PaginatedRequisitions {
+    requisitions: Requisition[];
+    lastVisible: QueryDocumentSnapshot<DocumentData> | null;
+}
+
 export class RequisitionService {
+
+    private static mapDocToRequisition(doc: QueryDocumentSnapshot<DocumentData>): Requisition {
+        const data = doc.data();
+        return {
+            id: doc.id,
+            protocol: data.protocol,
+            patientName: data.patientName,
+            procedures: data.procedures,
+            priority: data.priority,
+            susCard: data.susCard,
+            receivedDate: data.receivedDate.toDate(),
+            phones: data.phones,
+            status: data.status,
+            images: data.images,
+            createdBy: data.createdBy,
+            createdAt: data.createdAt?.toDate() || new Date(),
+            updatedAt: data.updatedAt?.toDate() || new Date(),
+            healthUnitId: data.healthUnitId,
+            healthAgentId: data.healthAgentId,
+            scheduledDate: data.scheduledDate?.toDate(),
+            scheduledLocation: data.scheduledLocation,
+            regulationType: data.regulationType,
+            hasCompanion: data.hasCompanion,
+            scheduledBy: data.scheduledBy,
+            scheduledAt: data.scheduledAt?.toDate(),
+            schedulingHistory:
+                data.schedulingHistory?.map((history: any) => ({
+                    ...history,
+                    scheduledDate: history.scheduledDate?.toDate(),
+                    scheduledAt: history.scheduledAt?.toDate(),
+                    canceledAt: history.canceledAt?.toDate(),
+                })) || [],
+        };
+    }
+
+    /**
+     * Busca requisições com status PENDENTE, SIS_PENDENTE ou RESOLICITADO.
+     * IMPORTANTE: Esta consulta requer um índice composto no Firestore.
+     * Coleção: requisitions | Campos: status (Ascendente), receivedDate (Descendente)
+     */
+    static async getPendingRequisitions(pageSize = 15, lastVisibleDoc: QueryDocumentSnapshot<DocumentData> | null = null): Promise<PaginatedRequisitions> {
+        try {
+            const constraints: QueryConstraint[] = [
+                where("status", "in", [Status.PENDENTE, Status.SIS_PENDENTE, Status.RESOLICITADO]),
+                orderBy("receivedDate", "desc"),
+                limit(pageSize)
+            ];
+
+            const q = lastVisibleDoc
+                ? query(collection(db, "requisitions"), ...constraints, startAfter(lastVisibleDoc))
+                : query(collection(db, "requisitions"), ...constraints);
+
+            const querySnapshot = await getDocs(q);
+            const requisitions = querySnapshot.docs.map(this.mapDocToRequisition);
+            const lastVisible = querySnapshot.docs[querySnapshot.docs.length - 1] || null;
+
+            return { requisitions, lastVisible };
+        } catch (error) {
+            console.error("Erro ao buscar requisições pendentes. Verifique se o índice do Firestore foi criado.", error);
+            throw error;
+        }
+    }
+
+    /**
+     * Busca requisições com status AGENDADO.
+     * IMPORTANTE: Esta consulta requer um índice composto no Firestore.
+     * Coleção: requisitions | Campos: status (Ascendente), scheduledDate (Ascendente)
+     */
+    static async getScheduledRequisitions(pageSize = 15, lastVisibleDoc: QueryDocumentSnapshot<DocumentData> | null = null): Promise<PaginatedRequisitions> {
+        try {
+            const constraints: QueryConstraint[] = [
+                where("status", "==", Status.AGENDADO),
+                orderBy("scheduledDate", "asc"),
+                limit(pageSize)
+            ];
+
+            const q = lastVisibleDoc
+                ? query(collection(db, "requisitions"), ...constraints, startAfter(lastVisibleDoc))
+                : query(collection(db, "requisitions"), ...constraints);
+
+            const querySnapshot = await getDocs(q);
+            const requisitions = querySnapshot.docs.map(this.mapDocToRequisition);
+            const lastVisible = querySnapshot.docs[querySnapshot.docs.length - 1] || null;
+
+            return { requisitions, lastVisible };
+        } catch (error) {
+            console.error("Erro ao buscar requisições agendadas. Verifique se o índice do Firestore foi criado.", error);
+            throw error;
+        }
+    }
+
+    /**
+     * Busca requisições com status CANCELADO ou CANCELADO_ARQUIVADO.
+     * IMPORTANTE: Esta consulta requer um índice composto no Firestore.
+     * Coleção: requisitions | Campos: status (Ascendente), updatedAt (Descendente)
+     */
+    static async getCanceledRequisitions(pageSize = 15, lastVisibleDoc: QueryDocumentSnapshot<DocumentData> | null = null): Promise<PaginatedRequisitions> {
+        try {
+            const constraints: QueryConstraint[] = [
+                where("status", "in", [Status.CANCELADO, Status.CANCELADO_ARQUIVADO]),
+                orderBy("updatedAt", "desc"),
+                limit(pageSize)
+            ];
+
+            const q = lastVisibleDoc
+                ? query(collection(db, "requisitions"), ...constraints, startAfter(lastVisibleDoc))
+                : query(collection(db, "requisitions"), ...constraints);
+
+            const querySnapshot = await getDocs(q);
+            const requisitions = querySnapshot.docs.map(this.mapDocToRequisition);
+            const lastVisible = querySnapshot.docs[querySnapshot.docs.length - 1] || null;
+
+            return { requisitions, lastVisible };
+        } catch (error) {
+            console.error("Erro ao buscar requisições canceladas. Verifique se o índice do Firestore foi criado.", error)
+            throw error
+        }
+    }
+
     static async createRequisition(data: CreateRequisitionData): Promise<string> {
         try {
             // Verificar se já existe uma requisição com o mesmo protocolo
@@ -188,40 +317,6 @@ export class RequisitionService {
             })
         } catch (error) {
             console.error("Erro ao buscar requisições:", error)
-            throw error
-        }
-    }
-
-    static async getCanceledRequisitions(): Promise<Requisition[]> {
-        try {
-            const q = query(
-                collection(db, "requisitions"),
-                where("status", "in", ["CANCELADO", "CANCELADO_ARQUIVADO"]),
-                orderBy("updatedAt", "desc"),
-            )
-            const querySnapshot = await getDocs(q)
-
-            return querySnapshot.docs.map((doc) => {
-                const data = doc.data()
-                return {
-                    id: doc.id,
-                    protocol: data.protocol,
-                    patientName: data.patientName,
-                    procedures: data.procedures,
-                    priority: data.priority,
-                    susCard: data.susCard,
-                    receivedDate: data.receivedDate.toDate(),
-                    phones: data.phones,
-                    status: data.status,
-                    images: data.images,
-                    createdBy: data.createdBy,
-                    createdAt: data.createdAt?.toDate() || new Date(),
-                    updatedAt: data.updatedAt?.toDate() || new Date(),
-                    healthUnitId: data.healthUnitId,
-                } as Requisition
-            })
-        } catch (error) {
-            console.error("Erro ao buscar requisições canceladas:", error)
             throw error
         }
     }
@@ -496,118 +591,6 @@ export class RequisitionService {
             await updateDoc(docRef, updateData)
         } catch (error) {
             console.error("Erro ao atualizar agendamento:", error)
-            throw error
-        }
-    }
-
-    static async getPendingRequisitions(): Promise<Requisition[]> {
-        try {
-            // Buscar todas as requisições e filtrar no cliente para evitar índice composto
-            const q = query(collection(db, "requisitions"), orderBy("createdAt", "desc"))
-            const querySnapshot = await getDocs(q)
-
-            const allRequisitions = querySnapshot.docs.map((doc) => {
-                const data = doc.data()
-                return {
-                    id: doc.id,
-                    protocol: data.protocol,
-                    patientName: data.patientName,
-                    procedures: data.procedures,
-                    priority: data.priority,
-                    susCard: data.susCard,
-                    receivedDate: data.receivedDate.toDate(),
-                    phones: data.phones,
-                    status: data.status,
-                    images: data.images,
-                    createdBy: data.createdBy,
-                    createdAt: data.createdAt?.toDate() || new Date(),
-                    updatedAt: data.updatedAt?.toDate() || new Date(),
-                    healthUnitId: data.healthUnitId || "",
-                    healthAgentId: data.healthAgentId,
-                    scheduledDate: data.scheduledDate?.toDate(),
-                    scheduledLocation: data.scheduledLocation,
-                    regulationType: data.regulationType,
-                    hasCompanion: data.hasCompanion,
-                    scheduledBy: data.scheduledBy,
-                    scheduledAt: data.scheduledAt?.toDate(),
-                    schedulingHistory:
-                        data.schedulingHistory?.map((history: any) => ({
-                            ...history,
-                            scheduledDate: history.scheduledDate?.toDate(),
-                            scheduledAt: history.scheduledAt?.toDate(),
-                            canceledAt: history.canceledAt?.toDate(),
-                        })) || [],
-                }
-            })
-
-            // Filtrar no cliente para requisições pendentes
-            const pendingRequisitions = allRequisitions.filter(
-                (req) =>
-                    req.status === "PENDENTE" ||
-                    req.status === "SIS_PENDENTE" ||
-                    req.status === "RESOLICITADO"
-            )
-
-            // Ordenar por data de recebimento (mais recentes primeiro)
-            return pendingRequisitions.sort((a, b) => b.receivedDate.getTime() - a.receivedDate.getTime())
-        } catch (error) {
-            console.error("Erro ao buscar requisições pendentes:", error)
-            throw error
-        }
-    }
-
-    static async getScheduledRequisitions(): Promise<Requisition[]> {
-        try {
-            // Buscar todas as requisições e filtrar no cliente para evitar índice composto
-            const q = query(collection(db, "requisitions"), orderBy("createdAt", "desc"))
-            const querySnapshot = await getDocs(q)
-
-            const allRequisitions = querySnapshot.docs.map((doc) => {
-                const data = doc.data()
-                return {
-                    id: doc.id,
-                    protocol: data.protocol,
-                    patientName: data.patientName,
-                    procedures: data.procedures,
-                    priority: data.priority,
-                    susCard: data.susCard,
-                    receivedDate: data.receivedDate.toDate(),
-                    phones: data.phones,
-                    status: data.status,
-                    images: data.images,
-                    createdBy: data.createdBy,
-                    createdAt: data.createdAt?.toDate() || new Date(),
-                    updatedAt: data.updatedAt?.toDate() || new Date(),
-                    healthUnitId: data.healthUnitId || "",
-                    healthAgentId: data.healthAgentId,
-                    scheduledDate: data.scheduledDate?.toDate(),
-                    scheduledLocation: data.scheduledLocation,
-                    regulationType: data.regulationType,
-                    hasCompanion: data.hasCompanion,
-                    scheduledBy: data.scheduledBy,
-                    scheduledAt: data.scheduledAt?.toDate(),
-                    schedulingHistory:
-                        data.schedulingHistory?.map((history: any) => ({
-                            ...history,
-                            scheduledDate: history.scheduledDate?.toDate(),
-                            scheduledAt: history.scheduledAt?.toDate(),
-                            canceledAt: history.canceledAt?.toDate(),
-                        })) || [],
-                }
-            })
-
-            // Filtrar no cliente para requisições agendadas
-            const scheduledRequisitions = allRequisitions.filter((req) => req.status === "AGENDADO")
-
-            // Ordenar por data agendada (mais próximas primeiro)
-            return scheduledRequisitions.sort((a, b) => {
-                if (!a.scheduledDate && !b.scheduledDate) return 0
-                if (!a.scheduledDate) return 1
-                if (!b.scheduledDate) return -1
-                return a.scheduledDate.getTime() - b.scheduledDate.getTime()
-            })
-        } catch (error) {
-            console.error("Erro ao buscar requisições agendadas:", error)
             throw error
         }
     }
