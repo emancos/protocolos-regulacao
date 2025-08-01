@@ -41,7 +41,10 @@ function UsersManagement() {
     }, [])
 
     const handleRoleChange = async (userId: string, newRole: UserRole) => {
-        if (!userProfile) return
+        if (!userProfile || !userProfile.uid) {
+            setMessage("Erro: Perfil do administrador não carregado corretamente. Tente recarregar a página.");
+            return;
+        }
 
         try {
             setUpdating(userId)

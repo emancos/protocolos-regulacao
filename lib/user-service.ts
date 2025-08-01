@@ -37,8 +37,8 @@ export class UserService {
             if (docSnap.exists()) {
                 const data = docSnap.data()
                 console.log("Dados encontrados:", data)
-
                 return {
+                    uid: docSnap.id, // Adiciona o ID do documento como 'uid'
                     ...data,
                     createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt),
                     updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : new Date(data.updatedAt),
@@ -48,7 +48,7 @@ export class UserService {
                 return null
             }
         } catch (error) {
-            console.error("Erro ao buscar perfil do usuário:", error)
+            console.error("Erro ao buscar perfil do usuÃ¡rio:", error)
             return null
         }
     }
@@ -77,6 +77,7 @@ export class UserService {
         return querySnapshot.docs.map((doc) => {
             const data = doc.data()
             return {
+                uid: doc.id, // Adicionado para consistência
                 ...data,
                 createdAt: data.createdAt.toDate(),
                 updatedAt: data.updatedAt.toDate(),
