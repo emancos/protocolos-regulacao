@@ -39,12 +39,14 @@ export interface SchedulingHistory {
     regulationType?: RegulationType | null
     hasCompanion: boolean
     status: Status
-    reason?: string // Motivo da alteração
+    reason?: string | null
     scheduledBy: string
     scheduledAt: Date
     canceledBy?: string
     canceledAt?: Date
-    cancelReason?: string
+    cancelReason?: string | null
+    sisregCode?: string | null
+    regnutsCode?: string | null
 }
 
 export interface Requisition {
@@ -73,6 +75,8 @@ export interface Requisition {
     hasCompanion?: boolean // Novo campo para acompanhante
     scheduledBy?: string
     scheduledAt?: Date
+    sisregCode?: string
+    regnutsCode?: string
 
     // Histórico de agendamentos
     schedulingHistory?: SchedulingHistory[]
@@ -92,7 +96,7 @@ export const STATUS_LABELS = {
     [Status.CANCELADO]: "Cancelado",
     [Status.CANCELADO_ARQUIVADO]: "Cancelado (Arquivado)",
     [Status.RESOLICITADO]: "Resolicitado",
-    [Status.SIS_PENDENTE]: "SIS Pendente",
+    [Status.SIS_PENDENTE]: "Aguardando Agendamento",
 }
 
 export const REGULATION_TYPE_LABELS = {
@@ -111,6 +115,6 @@ export const STATUS_COLORS = {
     [Status.SIS_PENDENTE]: "bg-purple-500",
 }
 
-export type ActionType = "cancel" | "archive" | "reschedule" | "resolicit" | "complete" | "";
+export type ActionType = "cancel" | "archive" | "reschedule" | "resolicit" | "complete" | "sis_pendente" | "";
 
 export type UpdateDataValue = string | Date | boolean | Status;

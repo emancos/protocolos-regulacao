@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { useAuth } from "@/contexts/auth-context"
@@ -30,7 +29,7 @@ import {
     REGULATION_TYPE_LABELS,
     STATUS_LABELS,
     STATUS_COLORS,
-    ActionType
+    type ActionType
 } from "@/types/requisitions"
 import { type UpdateSchedulingData } from "@/lib/requisition-service"
 import { UserRole } from "@/types/user"
@@ -55,10 +54,11 @@ function EditSchedulingForm() {
     const requisitionId = params.id as string
 
     const [requisition, setRequisition] = useState<Requisition | null>(null)
-    const [action, setAction] = useState<"cancel" | "archive" | "reschedule" | "resolicit" | "complete" | "">("")
-    //const [newStatus, setNewStatus] = useState<Status>(Status.AGENDADO)
+    const [action, setAction] = useState<ActionType>("")
     const [cancelReason, setCancelReason] = useState("")
     const [reason, setReason] = useState("")
+    const [sisregCode, setSisregCode] = useState("")
+    const [regnutsCode, setRegnutsCode] = useState("")
 
     // Para reagendamento
     const [newScheduledDate, setNewScheduledDate] = useState<Date>(new Date())
@@ -78,7 +78,6 @@ function EditSchedulingForm() {
                 const data = await RequisitionService.getRequisition(requisitionId)
                 if (data) {
                     setRequisition(data)
-                    // Pré-preencher dados para reagendamento
                     if (data.scheduledDate) setNewScheduledDate(data.scheduledDate)
                     if (data.scheduledLocation) setNewScheduledLocation(data.scheduledLocation)
                     if (data.regulationType) setNewRegulationType(data.regulationType)
@@ -87,6 +86,8 @@ function EditSchedulingForm() {
                         const time = format(data.scheduledDate, "HH:mm")
                         setNewScheduledTime(time)
                     }
+                    if (data.sisregCode) setSisregCode(data.sisregCode)
+                    if (data.regnutsCode) setRegnutsCode(data.regnutsCode)
                 } else {
                     setError("Requisição não encontrada")
                 }
@@ -97,7 +98,6 @@ function EditSchedulingForm() {
                 setLoadingRequisition(false)
             }
         }
-
         loadRequisition()
     }, [requisitionId])
 
@@ -115,6 +115,11 @@ function EditSchedulingForm() {
             return
         }
 
+        if ((action === "sis_pendente" || action === "resolicit") && !sisregCode.trim() && !regnutsCode.trim()) {
+            setError("É obrigatório preencher o Código SISREGIII ou o Código REGNUTS.")
+            return
+        }
+
         if (action === "reschedule" && !newScheduledLocation.trim()) {
             setError("Local de agendamento é obrigatório para reagendamento")
             return
@@ -123,38 +128,24 @@ function EditSchedulingForm() {
         try {
             setLoading(true)
 
-            // Start with a base object
             const updateData: Partial<UpdateSchedulingData> = {
                 updatedBy: user?.uid || "",
-            }
-
-            // Conditionally add fields only if they have a value
-            if (reason) {
-                updateData.reason = reason
-            }
-            if (cancelReason) {
-                updateData.cancelReason = cancelReason
+                reason: reason || undefined,
+                cancelReason: cancelReason || undefined,
+                sisregCode: sisregCode || undefined,
+                regnutsCode: regnutsCode || undefined,
             }
 
             switch (action) {
-                case "cancel":
-                    updateData.status = Status.CANCELADO
-                    break
-                case "archive":
-                    updateData.status = Status.CANCELADO_ARQUIVADO
-                    break
-                case "resolicit":
-                    updateData.status = Status.RESOLICITADO
-                    break
-                case "complete":
-                    updateData.status = Status.REALIZADO
-                    break
+                case "cancel": updateData.status = Status.CANCELADO; break
+                case "archive": updateData.status = Status.CANCELADO_ARQUIVADO; break
+                case "resolicit": updateData.status = Status.RESOLICITADO; break
+                case "complete": updateData.status = Status.REALIZADO; break
+                case "sis_pendente": updateData.status = Status.SIS_PENDENTE; break
                 case "reschedule":
-                    // ... (your reschedule logic)
                     const [hours, minutes] = newScheduledTime.split(":").map(Number)
                     const fullScheduledDate = new Date(newScheduledDate)
                     fullScheduledDate.setHours(hours, minutes)
-
                     updateData.status = Status.AGENDADO
                     updateData.newScheduledDate = fullScheduledDate
                     updateData.newScheduledLocation = newScheduledLocation
@@ -163,11 +154,7 @@ function EditSchedulingForm() {
                     break
             }
 
-            await RequisitionService.updateScheduling(
-                requisitionId,
-                updateData as UpdateSchedulingData
-            )
-
+            await RequisitionService.updateScheduling(requisitionId, updateData as UpdateSchedulingData)
             router.push("/requisitions")
         } catch (error) {
             console.error("Erro ao atualizar agendamento:", error)
@@ -297,6 +284,7 @@ function EditSchedulingForm() {
                                                     <SelectValue placeholder="Selecione uma ação" />
                                                 </SelectTrigger>
                                                 <SelectContent>
+                                                    <SelectItem value="sis_pendente">Aguardando Agendamento</SelectItem>
                                                     <SelectItem value="reschedule">Reagendar</SelectItem>
                                                     <SelectItem value="complete">Marcar como Realizado</SelectItem>
                                                     <SelectItem value="resolicit">Resolicitado</SelectItem>
@@ -307,6 +295,22 @@ function EditSchedulingForm() {
                                         </div>
 
                                         {/* Campos condicionais baseados na ação */}
+                                        {(action === "sis_pendente" || action === "resolicit") && (
+                                            <div className="space-y-4 border-t pt-4 animate-in fade-in-50">
+                                                <h3 className="font-medium">Códigos de Regulação</h3>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    <div className="space-y-2">
+                                                        <Label htmlFor="sisregCode">Código SISREGIII</Label>
+                                                        <Input id="sisregCode" value={sisregCode} onChange={(e) => setSisregCode(e.target.value)} placeholder="Código do SISREGIII" />
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <Label htmlFor="regnutsCode">Código REGNUTS</Label>
+                                                        <Input id="regnutsCode" value={regnutsCode} onChange={(e) => setRegnutsCode(e.target.value)} placeholder="Código do REGNUTS" />
+                                                    </div>
+                                                </div>
+                                                <p className="text-xs text-muted-foreground">Preencha pelo menos um dos códigos acima.</p>
+                                            </div>
+                                        )}
                                         {action === "reschedule" && (
                                             <div className="space-y-4 border-t pt-4">
                                                 <h3 className="font-medium">Novo Agendamento</h3>
