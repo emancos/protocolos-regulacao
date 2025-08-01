@@ -69,7 +69,8 @@ export interface UpdateSchedulingData {
     updatedBy: string
     reason?: string
     cancelReason?: string
-    // Para reagendamento
+    sisregCode?: string
+    regnutsCode?: string
     newScheduledDate?: Date
     newScheduledLocation?: string
     newRegulationType?: RegulationType
@@ -107,6 +108,8 @@ export class RequisitionService {
             hasCompanion: data.hasCompanion,
             scheduledBy: data.scheduledBy,
             scheduledAt: data.scheduledAt?.toDate(),
+            sisregCode: data.sisregCode,
+            regnutsCode: data.regnutsCode,
             schedulingHistory:
                 data.schedulingHistory?.map((history: any) => ({
                     ...history,
@@ -357,6 +360,8 @@ export class RequisitionService {
                 hasCompanion: data.hasCompanion,
                 scheduledBy: data.scheduledBy,
                 scheduledAt: data.scheduledAt?.toDate(),
+                sisregCode: data.sisregCode,
+                regnutsCode : data.regnutsCode,
                 schedulingHistory:
                     data.schedulingHistory?.map((history: any) => ({
                         ...history,
@@ -476,7 +481,29 @@ export class RequisitionService {
             // Criar entrada no histórico baseada na ação
             let historyEntry: SchedulingHistory
 
-            if (data.status === "CANCELADO" || data.status === "CANCELADO_ARQUIVADO") {
+            if (data.status === Status.SIS_PENDENTE || data.status === Status.RESOLICITADO) {
+                updateData.sisregCode = data.sisregCode || null;
+                updateData.regnutsCode = data.regnutsCode || null;
+                // Limpa informações de agendamento anterior
+                Object.assign(updateData, { scheduledDate: null, scheduledLocation: null, regulationType: null, hasCompanion: null, scheduledBy: null, scheduledAt: null });
+
+                historyEntry = {
+                    id: Date.now().toString(),
+                    status: data.status,
+                    scheduledAt: new Date(),
+                    scheduledBy: data.updatedBy,
+                    reason: data.reason || null,
+                    cancelReason: data.cancelReason || null,
+                    sisregCode: data.sisregCode || null,
+                    regnutsCode: data.regnutsCode || null,
+                    scheduledDate: null,
+                    scheduledLocation: "",
+                    regulationType: null,
+                    hasCompanion: false,
+                };
+            }
+
+            else if (data.status === "CANCELADO" || data.status === "CANCELADO_ARQUIVADO") {
                 // Cancelamento
                 historyEntry = {
                     id: Date.now().toString(),

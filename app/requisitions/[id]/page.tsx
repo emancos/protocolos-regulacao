@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
-import { ArrowLeft, Calendar, Phone, FileText, Edit, History, ArchiveRestore } from "lucide-react"
+import { ArrowLeft, Calendar, Phone, FileText, Edit, History, ArchiveRestore, Hash } from "lucide-react"
 import Link from "next/link"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { RequisitionService } from "@/lib/requisition-service"
@@ -69,7 +69,7 @@ function RequisitionDetail() {
             } finally {
                 setLoading(false)
             }
-        }
+        }        
 
         loadRequisition()
     }, [requisitionId])
@@ -197,7 +197,7 @@ function RequisitionDetail() {
                                                     <div>
                                                         <p className="text-sm font-medium text-gray-500">Cartão SUS</p>
                                                         <p>{requisition.susCard}</p>
-                                                    </div>
+                                                    </div>                                                    
                                                     <div>
                                                         <p className="text-sm font-medium text-gray-500">Telefones</p>
                                                         <div className="space-y-1">
@@ -220,6 +220,18 @@ function RequisitionDetail() {
                                                         <p className="text-sm font-medium text-gray-500">Status</p>
                                                         <p>{STATUS_LABELS[requisition.status]}</p>
                                                     </div>
+                                                    {requisition?.sisregCode && (
+                                                        <div>
+                                                            <p className="text-sm font-medium text-gray-500">Código SISREGIII</p>
+                                                            <div className="flex items-center"><Hash className="h-3 w-3 mr-1 text-gray-400" /><span>{requisition.sisregCode}</span></div>
+                                                        </div>
+                                                    )}
+                                                    {requisition?.regnutsCode && (
+                                                        <div>
+                                                            <p className="text-sm font-medium text-gray-500">Código REGNUTS</p>
+                                                            <div className="flex items-center"><Hash className="h-3 w-3 mr-1 text-gray-400" /><span>{requisition.regnutsCode}</span></div>
+                                                        </div>
+                                                    )}
                                                     <div>
                                                         <p className="text-sm font-medium text-gray-500">Prioridade</p>
                                                         <p>{PRIORITY_LABELS[requisition.priority]}</p>
@@ -366,6 +378,12 @@ function RequisitionDetail() {
                                                                         <p className="text-gray-500">Regulação</p>
                                                                         <p>{history.regulationType}</p>
                                                                     </div>
+                                                                )}
+                                                                {history.sisregCode && (
+                                                                    <div><p className="text-gray-500">Cód. SISREGIII</p><p>{history.sisregCode}</p></div>
+                                                                )}
+                                                                {history.regnutsCode && (
+                                                                    <div><p className="text-gray-500">Cód. REGNUTS</p><p>{history.regnutsCode}</p></div>
                                                                 )}
                                                                 <div>
                                                                     <p className="text-gray-500">Acompanhante</p>
