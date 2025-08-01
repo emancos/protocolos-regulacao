@@ -59,6 +59,7 @@ function RequisitionDetail() {
                 setLoading(true)
                 const data = await RequisitionService.getRequisition(requisitionId)
                 if (data) {
+                    console.log(data)
                     setRequisition(data)
                 } else {
                     setError("Requisição não encontrada")
