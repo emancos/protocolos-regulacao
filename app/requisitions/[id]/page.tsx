@@ -30,7 +30,6 @@ export default function RequisitionDetailPage() {
 
 function RequisitionDetail() {
     const params = useParams()
-    // const router = useRouter()
     const { hasPermission } = useUser()
     const requisitionId = params.id as string
 
@@ -227,7 +226,7 @@ function RequisitionDetail() {
                                                 </div>
                                             </div>
 
-                                            <div>                                                
+                                            <div>
                                                 {(healthUnit || healthAgent) && (
                                                     <div>
                                                         <h3 className="text-lg font-medium">Unidade e Agente de Saúde</h3>
@@ -248,7 +247,7 @@ function RequisitionDetail() {
                                                             )}
                                                         </div>
                                                     </div>
-                                                )}                                                
+                                                )}
                                             </div>
                                         </div>
 
@@ -257,7 +256,7 @@ function RequisitionDetail() {
                                                 <h3 className="text-lg font-medium">Dados da Requisição</h3>
                                                 <Separator className="my-2" />
                                                 <div className="space-y-2">
-                                                    {requisition.procedures.map((proc, index) => (                                                        
+                                                    {requisition.procedures.map((proc, index) => (
                                                         <div key={index} className="flex justify-between items-center">
                                                             <div>
                                                                 <p className="font-semibold flex items-center gap-2"><SquareActivity className="h-6 w-6 text-muted-foreground" />{proc.name}</p>
@@ -267,36 +266,36 @@ function RequisitionDetail() {
                                                                     {proc.quantity}x
                                                                 </Badge>
                                                             )}
-                                                        </div>                                                        
+                                                        </div>
                                                     ))}
                                                 </div>
-                                            </div>
-                                            <div className="grid grid-cols-1 gap-2">
-                                                <div>
-                                                    <p className="text-sm font-medium text-gray-500">Status</p>
-                                                    <p>{STATUS_LABELS[requisition.status]}</p>
-                                                </div>
-                                                {requisition?.sisregCode && (
+                                                <div className="grid grid-cols-1 gap-2">
                                                     <div>
-                                                        <p className="text-sm font-medium text-gray-500">Código SISREGIII</p>
-                                                        <div className="flex items-center"><Hash className="h-3 w-3 mr-1 text-gray-400" /><span>{requisition.sisregCode}</span></div>
+                                                        <p className="text-sm font-medium text-gray-500">Status</p>
+                                                        <p>{STATUS_LABELS[requisition.status]}</p>
                                                     </div>
-                                                )}
-                                                {requisition?.regnutsCode && (
+                                                    {requisition?.sisregCode && (
+                                                        <div>
+                                                            <p className="text-sm font-medium text-gray-500">Código SISREGIII</p>
+                                                            <div className="flex items-center"><Hash className="h-3 w-3 mr-1 text-gray-400" /><span>{requisition.sisregCode}</span></div>
+                                                        </div>
+                                                    )}
+                                                    {requisition?.regnutsCode && (
+                                                        <div>
+                                                            <p className="text-sm font-medium text-gray-500">Código REGNUTS</p>
+                                                            <div className="flex items-center"><Hash className="h-3 w-3 mr-1 text-gray-400" /><span>{requisition.regnutsCode}</span></div>
+                                                        </div>
+                                                    )}
                                                     <div>
-                                                        <p className="text-sm font-medium text-gray-500">Código REGNUTS</p>
-                                                        <div className="flex items-center"><Hash className="h-3 w-3 mr-1 text-gray-400" /><span>{requisition.regnutsCode}</span></div>
+                                                        <p className="text-sm font-medium text-gray-500">Prioridade</p>
+                                                        <p>{PRIORITY_LABELS[requisition.priority]}</p>
                                                     </div>
-                                                )}
-                                                <div>
-                                                    <p className="text-sm font-medium text-gray-500">Prioridade</p>
-                                                    <p>{PRIORITY_LABELS[requisition.priority]}</p>
-                                                </div>
-                                                <div>
-                                                    <p className="text-sm font-medium text-gray-500">Data de Recebimento</p>
-                                                    <div className="flex items-center">
-                                                        <Calendar className="h-3 w-3 mr-1 text-gray-400" />
-                                                        <span>{formatDateSafely(requisition.receivedDate)}</span>
+                                                    <div>
+                                                        <p className="text-sm font-medium text-gray-500">Data de Recebimento</p>
+                                                        <div className="flex items-center">
+                                                            <Calendar className="h-3 w-3 mr-1 text-gray-400" />
+                                                            <span>{formatDateSafely(requisition.receivedDate)}</span>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
