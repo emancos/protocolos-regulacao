@@ -30,13 +30,11 @@ export class UserService {
 
     static async getUserProfile(uid: string): Promise<UserProfile | null> {
         try {
-            console.log("Buscando perfil para UID:", uid)
             const docRef = doc(db, this.COLLECTION, uid)
             const docSnap = await getDoc(docRef)
 
             if (docSnap.exists()) {
                 const data = docSnap.data()
-                console.log("Dados encontrados:", data)
                 return {
                     uid: docSnap.id, // Adiciona o ID do documento como 'uid'
                     ...data,
