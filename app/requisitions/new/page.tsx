@@ -161,7 +161,8 @@ function NewRequisitionForm() {
         if (!result.success) { dispatch({ type: 'SET_ERRORS', payload: result.error.flatten().fieldErrors }); return; }
         dispatch({ type: 'SET_LOADING', payload: true });
         try {
-            const { phones, images, ...rest } = result.data;
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            const { phones, images, availableAgents, ...rest } = result.data;
             const filteredPhones = phones.filter((phone) => phone.trim() !== "");
             const imageData = images.filter(img => img.uploaded && img.url).map(img => ({ id: img.id, name: img.name, size: img.size, url: img.url!, uploadedAt: new Date(), oneDriveId: img.oneDriveId }));
             await RequisitionService.createRequisition({ ...rest, phones: filteredPhones, images: imageData.length > 0 ? imageData : undefined, createdBy: user?.uid || "", });
