@@ -21,9 +21,9 @@ import { ptBR } from "date-fns/locale"
 import { CalendarIcon, Plus, Trash2, ArrowLeft, AlertTriangle, Building, User, MapPin, Phone } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { RequisitionService } from "@/lib/requisition-service"
-import { HealthDataService } from "@/lib/health-data-service" // Importado
+import { HealthDataService } from "@/lib/health-data-service"
 import { Priority, Status, PRIORITY_LABELS } from "@/types/requisitions"
-import type { HealthUnit, HealthAgent } from "@/types/health-data" // Importado
+import type { HealthUnit, HealthAgent } from "@/types/health-data"
 import Link from "next/link"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { ProcedureSelector } from "@/components/procedure-selector"
@@ -72,7 +72,7 @@ const Step1 = ({ state, dispatch, errors, healthUnits, healthAgents, loadingUnit
             {/* Dados da Requisição */}
             <div className="md:col-span-2 space-y-2"><h3 className="text-lg font-medium">Dados da Requisição</h3><Separator /></div>
             <div className="space-y-2"><Label htmlFor="protocol">Protocolo *</Label><Input id="protocol" value={state.protocol} disabled className="bg-gray-100 dark:bg-gray-800" /></div>
-            <div className="space-y-2"><Label htmlFor="receivedDate">Data de Recebimento *</Label><Popover><PopoverTrigger asChild><Button variant="outline" className={cn("w-full justify-start text-left font-normal", !state.receivedDate && "text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4" />{state.receivedDate ? format(state.receivedDate, "PPP", { locale: ptBR }) : "Selecione uma data"}</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><Calendar mode="single" selected={state.receivedDate} onSelect={(date) => dispatch({ type: 'SET_FIELD', field: 'receivedDate', payload: date })} initialFocus locale={ptBR} /></PopoverContent></Popover><FieldError messages={errors.receivedDate} /></div>
+            <div className="space-y-2"><Label htmlFor="receivedDate">Data de Recebimento *</Label><Popover><PopoverTrigger asChild><Button variant="outline" className={cn("w-full justify-start text-left font-normal", !state.receivedDate && "text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4" />{state.receivedDate ? format(state.receivedDate, "PPP", { locale: ptBR }) : "Selecione uma data"}</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><Calendar mode="single" selected={state.receivedDate} onSelect={(date) => date && dispatch({ type: 'SET_FIELD', field: 'receivedDate', payload: date })} initialFocus locale={ptBR} /></PopoverContent></Popover><FieldError messages={errors.receivedDate} /></div>
             <div className="space-y-2 md:col-span-2"><Label htmlFor="priority">Prioridade *</Label><Select value={state.priority} onValueChange={(value) => dispatch({ type: 'SET_FIELD', field: 'priority', payload: value as Priority })}><SelectTrigger><SelectValue placeholder="Selecione a prioridade" /></SelectTrigger><SelectContent>{Object.values(Priority).map((p) => (<SelectItem key={p} value={p}>{PRIORITY_LABELS[p]}</SelectItem>))}</SelectContent></Select><FieldError messages={errors.priority} /></div>
 
             {/* Dados do Paciente */}
@@ -105,13 +105,11 @@ function NewRequisitionForm() {
     const [state, dispatch] = useReducer(formReducer, initialState);
     const [step, setStep] = useState(1);
 
-    // Estados para dados do Firestore
     const [healthUnits, setHealthUnits] = useState<HealthUnit[]>([]);
     const [healthAgents, setHealthAgents] = useState<HealthAgent[]>([]);
     const [loadingUnits, setLoadingUnits] = useState(true);
     const [loadingAgents, setLoadingAgents] = useState(false);
 
-    // Efeito para buscar unidades de saúde na montagem
     useEffect(() => {
         const fetchUnits = async () => {
             setLoadingUnits(true);
@@ -122,15 +120,14 @@ function NewRequisitionForm() {
         fetchUnits();
     }, []);
 
-    // Efeito para buscar agentes quando a unidade de saúde muda
     useEffect(() => {
         const fetchAgents = async () => {
             if (state.healthUnitId) {
                 setLoadingAgents(true);
-                dispatch({ type: 'SET_FIELD', field: 'healthAgentId', payload: '' }); // Reseta agente selecionado
+                dispatch({ type: 'SET_FIELD', field: 'healthAgentId', payload: '' });
                 const agents = await HealthDataService.getAgentsByUnit(state.healthUnitId);
                 setHealthAgents(agents);
-                dispatch({ type: 'SET_AVAILABLE_AGENTS', payload: agents }); // Atualiza no estado do form para validação
+                dispatch({ type: 'SET_AVAILABLE_AGENTS', payload: agents });
                 setLoadingAgents(false);
             } else {
                 setHealthAgents([]);
@@ -140,7 +137,6 @@ function NewRequisitionForm() {
         fetchAgents();
     }, [state.healthUnitId]);
 
-    // Efeito para gerar protocolo inicial
     useEffect(() => {
         const generateInitialProtocol = async () => {
             try {

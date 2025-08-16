@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
-import { ArrowLeft, Plus, Search, Calendar, Clock, RefreshCw, Archive } from "lucide-react"
+import { ArrowLeft, Plus, Search, Calendar, Clock, RefreshCw, Archive, FileClock } from "lucide-react"
 import Link from "next/link"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { RequisitionService, type PaginatedRequisitions } from "@/lib/requisition-service"
@@ -35,6 +35,7 @@ function RequisitionsContent() {
 
     // Estados para cada lista de requisições
     const [pendingRequisitions, setPendingRequisitions] = useState<Requisition[]>([])
+    const [sisPendingRequisitions, setSisPendingRequisitions] = useState<Requisition[]>([])
     const [scheduledRequisitions, setScheduledRequisitions] = useState<Requisition[]>([])
     const [canceledRequisitions, setCanceledRequisitions] = useState<Requisition[]>([])
 
@@ -66,6 +67,10 @@ function RequisitionsContent() {
                     result = await RequisitionService.getPendingRequisitions(15, lastDoc)
                     setPendingRequisitions(prev => loadMore ? [...prev, ...result.requisitions] : result.requisitions)
                     break
+                case "sis_pending":
+                    result = await RequisitionService.getSisPendingRequisitions(15, lastDoc)
+                    setSisPendingRequisitions(prev => loadMore ? [...prev, ...result.requisitions] : result.requisitions)
+                    break
                 case "scheduled":
                     result = await RequisitionService.getScheduledRequisitions(15, lastDoc)
                     setScheduledRequisitions(prev => loadMore ? [...prev, ...result.requisitions] : result.requisitions)
@@ -92,6 +97,7 @@ function RequisitionsContent() {
             setLoading(true);
             await Promise.all([
                 fetchRequisitions('pending', false),
+                fetchRequisitions('sis_pending', false),
                 fetchRequisitions('scheduled', false),
                 fetchRequisitions('canceled', false)
             ]);
@@ -107,6 +113,7 @@ function RequisitionsContent() {
         setHasMore(prev => ({ ...prev, [activeTab]: true }));
 
         if (activeTab === 'pending') setPendingRequisitions([]);
+        if (activeTab === 'sis_pending') setSisPendingRequisitions([]);
         if (activeTab === 'scheduled') setScheduledRequisitions([]);
         if (activeTab === 'canceled') setCanceledRequisitions([]);
 
@@ -125,6 +132,7 @@ function RequisitionsContent() {
     }
 
     const filteredPending = filterData(pendingRequisitions)
+    const filteredSisPending = filterData(sisPendingRequisitions)
     const filteredScheduled = filterData(scheduledRequisitions)
     const filteredCanceled = filterData(canceledRequisitions)
 
@@ -306,6 +314,13 @@ function RequisitionsContent() {
                                             {pendingRequisitions.length}{hasMore.pending ? '+' : ''}
                                         </Badge>
                                     </TabsTrigger>
+                                    <TabsTrigger value="sis_pending" className="flex items-center">
+                                        <FileClock className="h-4 w-4 mr-2" />
+                                        Aguardando Agendamento
+                                        <Badge variant="secondary" className="ml-2">
+                                            {sisPendingRequisitions.length}{hasMore.sis_pending ? '+' : ''}
+                                        </Badge>
+                                    </TabsTrigger>
                                     <TabsTrigger value="scheduled" className="flex items-center">
                                         <Calendar className="h-4 w-4 mr-2" />
                                         Agendados
@@ -324,6 +339,9 @@ function RequisitionsContent() {
 
                                 <TabsContent value="pending">
                                     {renderTable(filteredPending, 'pending')}
+                                </TabsContent>
+                                <TabsContent value="sis_pending">
+                                    {renderTable(filteredSisPending, 'sis_pending')}
                                 </TabsContent>
                                 <TabsContent value="scheduled">
                                     {renderTable(filteredScheduled, 'scheduled')}

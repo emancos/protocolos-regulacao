@@ -121,18 +121,16 @@ export class RequisitionService {
     }
 
     /**
-     * Busca requisições com status PENDENTE, SIS_PENDENTE ou RESOLICITADO.
-     * IMPORTANTE: Esta consulta requer um índice composto no Firestore.
-     * Coleção: requisitions | Campos: status (Ascendente), receivedDate (Descendente)
+     * Busca requisições com status PENDENTE ou RESOLICITADO.
+     * IMPORTANTE: Requer índice no Firestore: status (Asc), receivedDate (Desc)
      */
     static async getPendingRequisitions(pageSize = 15, lastVisibleDoc: QueryDocumentSnapshot<DocumentData> | null = null): Promise<PaginatedRequisitions> {
         try {
             const constraints: QueryConstraint[] = [
-                where("status", "in", [Status.PENDENTE, Status.SIS_PENDENTE, Status.RESOLICITADO]),
+                where("status", "in", [Status.PENDENTE, Status.RESOLICITADO]), // SIS_PENDENTE removido
                 orderBy("receivedDate", "desc"),
                 limit(pageSize)
             ];
-
             const q = lastVisibleDoc
                 ? query(collection(db, "requisitions"), ...constraints, startAfter(lastVisibleDoc))
                 : query(collection(db, "requisitions"), ...constraints);
@@ -144,6 +142,28 @@ export class RequisitionService {
             return { requisitions, lastVisible };
         } catch (error) {
             console.error("Erro ao buscar requisições pendentes. Verifique se o índice do Firestore foi criado.", error);
+            throw error;
+        }
+    }
+
+    static async getSisPendingRequisitions(pageSize = 15, lastVisibleDoc: QueryDocumentSnapshot<DocumentData> | null = null): Promise<PaginatedRequisitions> {
+        try {
+            const constraints: QueryConstraint[] = [
+                where("status", "==", Status.SIS_PENDENTE),
+                orderBy("receivedDate", "desc"),
+                limit(pageSize)
+            ];
+            const q = lastVisibleDoc
+                ? query(collection(db, "requisitions"), ...constraints, startAfter(lastVisibleDoc))
+                : query(collection(db, "requisitions"), ...constraints);
+
+            const querySnapshot = await getDocs(q);
+            const requisitions = querySnapshot.docs.map(this.mapDocToRequisition);
+            const lastVisible = querySnapshot.docs[querySnapshot.docs.length - 1] || null;
+
+            return { requisitions, lastVisible };
+        } catch (error) {
+            console.error("Erro ao buscar requisições 'Aguardando Agendamento'. Verifique se o índice do Firestore foi criado.", error);
             throw error;
         }
     }
