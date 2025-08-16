@@ -487,6 +487,14 @@ export class RequisitionService {
         try {
             const docRef = doc(db, "requisitions", id)
 
+            if (data.status === Status.SIS_PENDENTE || data.status === Status.RESOLICITADO) {
+                await this.checkUniqueRegulationCodes({
+                    sisregCode: data.sisregCode,
+                    regnutsCode: data.regnutsCode,
+                    currentRequisitionId: id,
+                });
+            }
+
             // Buscar requisição atual para adicionar ao histórico
             const currentReq = await this.getRequisitionById(id)
             if (!currentReq) {
@@ -677,5 +685,32 @@ export class RequisitionService {
 
         // Se o loop terminar sem sucesso, lance um erro.
         throw new Error('Não foi possível gerar um protocolo único após várias tentativas.');
+    }
+
+    private static async checkUniqueRegulationCodes(
+        { sisregCode, regnutsCode, currentRequisitionId }:
+            { sisregCode?: string | null, regnutsCode?: string | null, currentRequisitionId: string }
+    ): Promise<void> {
+        const requisitionsRef = collection(db, "requisitions");
+
+        if (sisregCode) {
+            const q = query(requisitionsRef, where("sisregCode", "==", sisregCode));
+            const querySnapshot = await getDocs(q);
+            for (const doc of querySnapshot.docs) {
+                if (doc.id !== currentRequisitionId) {
+                    throw new Error(`O Código SISREGIII "${sisregCode}" já está em uso no protocolo ${doc.data().protocol}.`);
+                }
+            }
+        }
+
+        if (regnutsCode) {
+            const q = query(requisitionsRef, where("regnutsCode", "==", regnutsCode));
+            const querySnapshot = await getDocs(q);
+            for (const doc of querySnapshot.docs) {
+                if (doc.id !== currentRequisitionId) {
+                    throw new Error(`O Código REGNUTS "${regnutsCode}" já está em uso no protocolo ${doc.data().protocol}.`);
+                }
+            }
+        }
     }
 }

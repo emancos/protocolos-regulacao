@@ -158,7 +158,11 @@ function EditSchedulingForm() {
             router.push("/requisitions")
         } catch (error) {
             console.error("Erro ao atualizar agendamento:", error)
-            setError("Erro ao atualizar agendamento. Tente novamente.")
+            if (error instanceof Error) {
+                setError(error.message);
+            } else {
+                setError("Ocorreu um erro desconhecido ao atualizar o agendamento.");
+            }
         } finally {
             setLoading(false)
         }
