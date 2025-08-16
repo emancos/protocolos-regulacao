@@ -27,36 +27,41 @@ export default function RequisitionsPage() {
     )
 }
 
+// Define a type for the tab keys to ensure type safety
+type TabKey = "pending" | "sis_pending" | "scheduled" | "canceled";
+
 function RequisitionsContent() {
     const router = useRouter()
     const { hasPermission } = useUser()
-    const [activeTab, setActiveTab] = useState("pending")
+    const [activeTab, setActiveTab] = useState<TabKey>("pending")
     const [searchTerm, setSearchTerm] = useState("")
 
-    // Estados para cada lista de requisições
+    // States for each requisition list
     const [pendingRequisitions, setPendingRequisitions] = useState<Requisition[]>([])
     const [sisPendingRequisitions, setSisPendingRequisitions] = useState<Requisition[]>([])
     const [scheduledRequisitions, setScheduledRequisitions] = useState<Requisition[]>([])
     const [canceledRequisitions, setCanceledRequisitions] = useState<Requisition[]>([])
 
-    // Estados para controle de paginação
+    // States for pagination control
     const [lastVisible, setLastVisible] = useState<Record<string, QueryDocumentSnapshot<DocumentData> | null>>({
         pending: null,
+        sis_pending: null,
         scheduled: null,
         canceled: null,
     })
     const [hasMore, setHasMore] = useState<Record<string, boolean>>({
         pending: true,
+        sis_pending: true,
         scheduled: true,
         canceled: true,
     })
 
-    // Estados de carregamento
+    // Loading states
     const [loading, setLoading] = useState(true)
     const [loadingMore, setLoadingMore] = useState(false)
 
     const fetchRequisitions = useCallback(async (tab: string, loadMore = false) => {
-        if (!loadMore) setLoading(true); else setLoadingMore(true);
+        if (loadMore) setLoadingMore(true);
 
         const lastDoc = loadMore ? lastVisible[tab] : null
         let result: PaginatedRequisitions
@@ -88,7 +93,7 @@ function RequisitionsContent() {
         } catch (error) {
             console.error(`Erro ao carregar requisições da aba ${tab}:`, error)
         } finally {
-            if (!loadMore) setLoading(false); else setLoadingMore(false)
+            if (loadMore) setLoadingMore(false)
         }
     }, [lastVisible])
 
@@ -108,7 +113,8 @@ function RequisitionsContent() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    const refreshCurrentTab = () => {
+    const refreshCurrentTab = async () => {
+        setLoading(true);
         setLastVisible(prev => ({ ...prev, [activeTab]: null }));
         setHasMore(prev => ({ ...prev, [activeTab]: true }));
 
@@ -117,24 +123,57 @@ function RequisitionsContent() {
         if (activeTab === 'scheduled') setScheduledRequisitions([]);
         if (activeTab === 'canceled') setCanceledRequisitions([]);
 
-        // A busca será reacioda pelo useEffect após a limpeza do estado
-        fetchRequisitions(activeTab);
+        await fetchRequisitions(activeTab, false);
+        setLoading(false);
     }
 
     const filterData = (data: Requisition[]) => {
-        if (!searchTerm) return data
+        if (!searchTerm) return data;
+
+        const lowerCaseSearchTerm = searchTerm.toLowerCase();
+        // Cria uma versão do termo de busca apenas com números para o Cartão SUS
+        const numericSearchTerm = searchTerm.replace(/\D/g, '');
+
         return data.filter(
-            (req) =>
-                req.patientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                req.protocol.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                req.procedures.some((proc) => proc.name.toLowerCase().includes(searchTerm.toLowerCase()))
-        )
+            (req) => {
+                // Limpa o Cartão SUS do documento para comparar com a busca numérica
+                const cleanedSusCard = req.susCard.replace(/\D/g, '');
+
+                return (
+                    req.patientName.toLowerCase().includes(lowerCaseSearchTerm) ||
+                    req.protocol.toLowerCase().includes(lowerCaseSearchTerm) ||
+                    req.procedures.some((proc) => proc.name.toLowerCase().includes(lowerCaseSearchTerm)) ||
+                    (numericSearchTerm.length > 0 && cleanedSusCard.includes(numericSearchTerm))
+                );
+            }
+        );
     }
 
     const filteredPending = filterData(pendingRequisitions)
     const filteredSisPending = filterData(sisPendingRequisitions)
     const filteredScheduled = filterData(scheduledRequisitions)
     const filteredCanceled = filterData(canceledRequisitions)
+
+    // Efeito para mudar de aba automaticamente se o resultado da busca estiver em outra aba
+    useEffect(() => {
+        if (searchTerm) {
+            const resultsInTabs: Record<TabKey, number> = {
+                pending: filteredPending.length,
+                sis_pending: filteredSisPending.length,
+                scheduled: filteredScheduled.length,
+                canceled: filteredCanceled.length,
+            };
+
+            // Se a aba atual não tem resultados, mas outra tem, mude para a primeira que encontrar
+            if (resultsInTabs[activeTab] === 0) {
+                const firstTabWithResults = Object.keys(resultsInTabs).find(key => resultsInTabs[key as TabKey] > 0);
+                if (firstTabWithResults) {
+                    setActiveTab(firstTabWithResults as TabKey);
+                }
+            }
+        }
+    }, [searchTerm, activeTab, filteredPending.length, filteredSisPending.length, filteredScheduled.length, filteredCanceled.length]);
+
 
     const getPriorityBadge = (priority: Priority) => {
         switch (priority) {
@@ -154,11 +193,11 @@ function RequisitionsContent() {
     }
 
     const renderTable = (requisitions: Requisition[], tabKey: string) => {
-        if (loading) {
+        if (loading && requisitions.length === 0) {
             return (
                 <div className="text-center py-8">
                     <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-4" />
-                    <p>Carregando requisições...</p>
+                    <p>A carregar requisições...</p>
                 </div>
             )
         }
@@ -227,7 +266,7 @@ function RequisitionsContent() {
                                             <Button variant="outline" size="sm" onClick={() => router.push(`/requisitions/${req.id}`)}>
                                                 Detalhes
                                             </Button>
-                                            {tabKey === 'pending' && hasPermission("canApproveRequests") && (
+                                            {(tabKey === 'pending' || tabKey === 'sis_pending') && hasPermission("canApproveRequests") && (
                                                 <Button size="sm" onClick={() => router.push(`/requisitions/${req.id}/schedule`)}>
                                                     Agendar
                                                 </Button>
@@ -243,7 +282,7 @@ function RequisitionsContent() {
                     <div className="mt-6 text-center">
                         <Button onClick={() => fetchRequisitions(tabKey, true)} disabled={loadingMore}>
                             {loadingMore ? (
-                                <><RefreshCw className="h-4 w-4 mr-2 animate-spin" /> Carregando...</>
+                                <><RefreshCw className="h-4 w-4 mr-2 animate-spin" /> A carregar...</>
                             ) : (
                                 "Carregar Mais"
                             )}
@@ -285,7 +324,7 @@ function RequisitionsContent() {
                         <div className="relative w-full max-w-sm">
                             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
                             <Input
-                                placeholder="Buscar por nome, protocolo ou procedimento..."
+                                placeholder="Buscar por nome, protocolo, Cartão SUS..."
                                 className="pl-8"
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -301,38 +340,42 @@ function RequisitionsContent() {
 
                     <Card>
                         <CardHeader>
-                            <CardTitle>Gerenciar Requisições</CardTitle>
-                            <CardDescription>Visualize e gerencie todas as requisições de procedimentos</CardDescription>
+                            <CardTitle>Gerir Requisições</CardTitle>
+                            <CardDescription>Visualize e gira todas as requisições de procedimentos</CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <Tabs value={activeTab} onValueChange={setActiveTab}>
-                                <TabsList className="mb-4">
+                            <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as TabKey)}>
+                                <TabsList className="mb-4 grid w-full grid-cols-2 md:grid-cols-4">
                                     <TabsTrigger value="pending" className="flex items-center">
                                         <Clock className="h-4 w-4 mr-2" />
                                         Pendentes
                                         <Badge variant="secondary" className="ml-2">
-                                            {pendingRequisitions.length}{hasMore.pending ? '+' : ''}
+                                            {searchTerm ? filteredPending.length : pendingRequisitions.length}
+                                            {hasMore.pending && !searchTerm ? '+' : ''}
                                         </Badge>
                                     </TabsTrigger>
                                     <TabsTrigger value="sis_pending" className="flex items-center">
                                         <FileClock className="h-4 w-4 mr-2" />
-                                        Aguardando Agendamento
+                                        Aguardando
                                         <Badge variant="secondary" className="ml-2">
-                                            {sisPendingRequisitions.length}{hasMore.sis_pending ? '+' : ''}
+                                            {searchTerm ? filteredSisPending.length : sisPendingRequisitions.length}
+                                            {hasMore.sis_pending && !searchTerm ? '+' : ''}
                                         </Badge>
                                     </TabsTrigger>
                                     <TabsTrigger value="scheduled" className="flex items-center">
                                         <Calendar className="h-4 w-4 mr-2" />
                                         Agendados
                                         <Badge variant="secondary" className="ml-2">
-                                            {scheduledRequisitions.length}{hasMore.scheduled ? '+' : ''}
+                                            {searchTerm ? filteredScheduled.length : scheduledRequisitions.length}
+                                            {hasMore.scheduled && !searchTerm ? '+' : ''}
                                         </Badge>
                                     </TabsTrigger>
                                     <TabsTrigger value="canceled" className="flex items-center">
                                         <Archive className="h-4 w-4 mr-2" />
-                                        Cancelados e Arquivados
+                                        Cancelados
                                         <Badge variant="secondary" className="ml-2">
-                                            {canceledRequisitions.length}{hasMore.canceled ? '+' : ''}
+                                            {searchTerm ? filteredCanceled.length : canceledRequisitions.length}
+                                            {hasMore.canceled && !searchTerm ? '+' : ''}
                                         </Badge>
                                     </TabsTrigger>
                                 </TabsList>
