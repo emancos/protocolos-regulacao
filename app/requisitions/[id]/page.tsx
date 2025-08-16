@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
-import { ArrowLeft, Calendar, Phone, FileText, Edit, History, ArchiveRestore, Hash } from "lucide-react"
+import { ArrowLeft, Calendar, Phone, FileText, Edit, History, ArchiveRestore, Hash, Building, MapPin, User, SquareActivity } from "lucide-react"
 import Link from "next/link"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { RequisitionService } from "@/lib/requisition-service"
@@ -17,6 +17,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
 import { useUser } from "@/contexts/user-context"
 import { ImageWithFallback } from "@/components/Image-with-fallback"
+import { HealthDataService } from "@/lib/health-data-service"
+import { HealthAgent, HealthUnit } from "@/types/health-data"
 
 export default function RequisitionDetailPage() {
     return (
@@ -33,6 +35,8 @@ function RequisitionDetail() {
     const requisitionId = params.id as string
 
     const [requisition, setRequisition] = useState<Requisition | null>(null)
+    const [healthUnit, setHealthUnit] = useState<HealthUnit | null>(null)
+    const [healthAgent, setHealthAgent] = useState<HealthAgent | null>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState("")
     const [activeTab, setActiveTab] = useState("details")
@@ -56,13 +60,23 @@ function RequisitionDetail() {
     useEffect(() => {
         const loadRequisition = async () => {
             try {
-                setLoading(true)
-                const data = await RequisitionService.getRequisition(requisitionId)
-                if (data) {
-                    console.log(data)
-                    setRequisition(data)
+                setLoading(true);
+                const requisitionData = await RequisitionService.getRequisitionById(requisitionId);
+                if (requisitionData) {
+                    setRequisition(requisitionData);
+
+                    // Buscar dados relacionados
+                    if (requisitionData.healthUnitId) {
+                        const unitData = await HealthDataService.getHealthUnitById(requisitionData.healthUnitId);
+                        setHealthUnit(unitData);
+                    }
+                    if (requisitionData.healthAgentId) {
+                        const agentData = await HealthDataService.getHealthAgentById(requisitionData.healthAgentId);
+                        setHealthAgent(agentData);
+                    }
+
                 } else {
-                    setError("Requisição não encontrada")
+                    setError("Requisição não encontrada");
                 }
             } catch (error) {
                 console.error("Erro ao carregar requisição:", error)
@@ -70,7 +84,7 @@ function RequisitionDetail() {
             } finally {
                 setLoading(false)
             }
-        }        
+        }
 
         loadRequisition()
     }, [requisitionId])
@@ -198,7 +212,7 @@ function RequisitionDetail() {
                                                     <div>
                                                         <p className="text-sm font-medium text-gray-500">Cartão SUS</p>
                                                         <p>{requisition.susCard}</p>
-                                                    </div>                                                    
+                                                    </div>
                                                     <div>
                                                         <p className="text-sm font-medium text-gray-500">Telefones</p>
                                                         <div className="space-y-1">
@@ -213,60 +227,77 @@ function RequisitionDetail() {
                                                 </div>
                                             </div>
 
-                                            <div>
-                                                <h3 className="text-lg font-medium">Dados da Requisição</h3>
-                                                <Separator className="my-2" />
-                                                <div className="grid grid-cols-1 gap-2">
+                                            <div>                                                
+                                                {(healthUnit || healthAgent) && (
                                                     <div>
-                                                        <p className="text-sm font-medium text-gray-500">Status</p>
-                                                        <p>{STATUS_LABELS[requisition.status]}</p>
-                                                    </div>
-                                                    {requisition?.sisregCode && (
-                                                        <div>
-                                                            <p className="text-sm font-medium text-gray-500">Código SISREGIII</p>
-                                                            <div className="flex items-center"><Hash className="h-3 w-3 mr-1 text-gray-400" /><span>{requisition.sisregCode}</span></div>
-                                                        </div>
-                                                    )}
-                                                    {requisition?.regnutsCode && (
-                                                        <div>
-                                                            <p className="text-sm font-medium text-gray-500">Código REGNUTS</p>
-                                                            <div className="flex items-center"><Hash className="h-3 w-3 mr-1 text-gray-400" /><span>{requisition.regnutsCode}</span></div>
-                                                        </div>
-                                                    )}
-                                                    <div>
-                                                        <p className="text-sm font-medium text-gray-500">Prioridade</p>
-                                                        <p>{PRIORITY_LABELS[requisition.priority]}</p>
-                                                    </div>
-                                                    <div>
-                                                        <p className="text-sm font-medium text-gray-500">Data de Recebimento</p>
-                                                        <div className="flex items-center">
-                                                            <Calendar className="h-3 w-3 mr-1 text-gray-400" />
-                                                            <span>{formatDateSafely(requisition.receivedDate)}</span>
+                                                        <h3 className="text-lg font-medium">Unidade e Agente de Saúde</h3>
+                                                        <Separator className="my-2" />
+                                                        <div className="space-y-3">
+                                                            {healthUnit && (
+                                                                <div className="p-3 bg-muted/50 rounded-lg text-sm space-y-1">
+                                                                    <p className="font-semibold flex items-center gap-2"><Building className="h-4 w-4 text-muted-foreground" />Unidade: {healthUnit.name}</p>
+                                                                    <div className="flex items-center gap-2 text-muted-foreground"><MapPin className="h-3 w-3" /> {healthUnit.location}</div>
+                                                                    <div className="flex items-center gap-2 text-muted-foreground"><User className="h-3 w-3" /> Enf. Resp.: {healthUnit.responsible_nurse}</div>
+                                                                </div>
+                                                            )}
+                                                            {healthAgent && (
+                                                                <div className="p-3 bg-muted/50 rounded-lg text-sm space-y-1">
+                                                                    <p className="font-semibold flex items-center gap-2"><User className="h-4 w-4 text-muted-foreground" />Agente: {healthAgent.name}</p>
+                                                                    <div className="flex items-center gap-2 text-muted-foreground"><Phone className="h-3 w-3" /> {healthAgent.phone_number}</div>
+                                                                </div>
+                                                            )}
                                                         </div>
                                                     </div>
-                                                </div>
+                                                )}                                                
                                             </div>
                                         </div>
 
                                         <div className="space-y-4">
                                             <div>
-                                                <h3 className="text-lg font-medium">Procedimentos</h3>
+                                                <h3 className="text-lg font-medium">Dados da Requisição</h3>
                                                 <Separator className="my-2" />
                                                 <div className="space-y-2">
-                                                    {requisition.procedures.map((proc, index) => (
-                                                        <Card key={index} className="p-3">
-                                                            <div className="flex justify-between items-center">
-                                                                <div>
-                                                                    <p className="font-medium">{proc.name}</p>
-                                                                </div>
-                                                                {proc.quantity > 1 && (
-                                                                    <Badge variant="outline" className="ml-2">
-                                                                        {proc.quantity}x
-                                                                    </Badge>
-                                                                )}
+                                                    {requisition.procedures.map((proc, index) => (                                                        
+                                                        <div key={index} className="flex justify-between items-center">
+                                                            <div>
+                                                                <p className="font-semibold flex items-center gap-2"><SquareActivity className="h-6 w-6 text-muted-foreground" />{proc.name}</p>
                                                             </div>
-                                                        </Card>
+                                                            {proc.quantity > 1 && (
+                                                                <Badge variant="outline" className="ml-2">
+                                                                    {proc.quantity}x
+                                                                </Badge>
+                                                            )}
+                                                        </div>                                                        
                                                     ))}
+                                                </div>
+                                            </div>
+                                            <div className="grid grid-cols-1 gap-2">
+                                                <div>
+                                                    <p className="text-sm font-medium text-gray-500">Status</p>
+                                                    <p>{STATUS_LABELS[requisition.status]}</p>
+                                                </div>
+                                                {requisition?.sisregCode && (
+                                                    <div>
+                                                        <p className="text-sm font-medium text-gray-500">Código SISREGIII</p>
+                                                        <div className="flex items-center"><Hash className="h-3 w-3 mr-1 text-gray-400" /><span>{requisition.sisregCode}</span></div>
+                                                    </div>
+                                                )}
+                                                {requisition?.regnutsCode && (
+                                                    <div>
+                                                        <p className="text-sm font-medium text-gray-500">Código REGNUTS</p>
+                                                        <div className="flex items-center"><Hash className="h-3 w-3 mr-1 text-gray-400" /><span>{requisition.regnutsCode}</span></div>
+                                                    </div>
+                                                )}
+                                                <div>
+                                                    <p className="text-sm font-medium text-gray-500">Prioridade</p>
+                                                    <p>{PRIORITY_LABELS[requisition.priority]}</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-sm font-medium text-gray-500">Data de Recebimento</p>
+                                                    <div className="flex items-center">
+                                                        <Calendar className="h-3 w-3 mr-1 text-gray-400" />
+                                                        <span>{formatDateSafely(requisition.receivedDate)}</span>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>

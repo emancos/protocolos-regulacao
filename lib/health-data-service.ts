@@ -1,11 +1,10 @@
-import { collection, getDocs, query, where, orderBy } from "firebase/firestore";
+import { collection, getDocs, query, where, orderBy, doc, getDoc } from "firebase/firestore";
 import { db } from "./firebase";
 import type { HealthUnit, HealthAgent } from "@/types/health-data";
 
 export class HealthDataService {
     /**
      * Busca todas as unidades de saúde do Firestore, ordenadas por nome.
-     * @returns Uma promessa que resolve para um array de HealthUnit.
      */
     static async getAllHealthUnits(): Promise<HealthUnit[]> {
         try {
@@ -25,8 +24,6 @@ export class HealthDataService {
 
     /**
      * Busca todos os agentes de saúde vinculados a uma unidade específica.
-     * @param unitId O ID da unidade de saúde.
-     * @returns Uma promessa que resolve para um array de HealthAgent.
      */
     static async getAgentsByUnit(unitId: string): Promise<HealthAgent[]> {
         if (!unitId) return [];
@@ -46,6 +43,42 @@ export class HealthDataService {
         } catch (error) {
             console.error(`Erro ao buscar agentes para a unidade ${unitId}:`, error);
             return [];
+        }
+    }
+
+    /**
+     * Busca uma unidade de saúde específica pelo seu ID.
+     */
+    static async getHealthUnitById(unitId: string): Promise<HealthUnit | null> {
+        if (!unitId) return null;
+        try {
+            const unitRef = doc(db, 'health_units', unitId);
+            const docSnap = await getDoc(unitRef);
+            if (docSnap.exists()) {
+                return { id: docSnap.id, ...docSnap.data() } as HealthUnit;
+            }
+            return null;
+        } catch (error) {
+            console.error(`Erro ao buscar unidade de saúde ${unitId}:`, error);
+            return null;
+        }
+    }
+
+    /**
+     * Busca um agente de saúde específico pelo seu ID.
+     */
+    static async getHealthAgentById(agentId: string): Promise<HealthAgent | null> {
+        if (!agentId) return null;
+        try {
+            const agentRef = doc(db, 'health_agents', agentId);
+            const docSnap = await getDoc(agentRef);
+            if (docSnap.exists()) {
+                return { id: docSnap.id, ...docSnap.data() } as HealthAgent;
+            }
+            return null;
+        } catch (error) {
+            console.error(`Erro ao buscar agente de saúde ${agentId}:`, error);
+            return null;
         }
     }
 }
