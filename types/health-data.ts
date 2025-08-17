@@ -6,6 +6,7 @@ export interface HealthUnit {
     name: string;
     location: string;
     responsible_nurse: string;
+    observation?: string;
 }
 
 /**
