@@ -1,20 +1,140 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import Link from "next/link"
 import { useUser } from "@/contexts/user-context"
+import { AuthGuard } from "@/components/auth-guard"
 import { RoleGuard } from "@/components/role-guard"
-import { UserRoleBadge } from "@/components/user-role-badge"
+import { UserService } from "@/lib/user-service"
+import { type UserProfile, UserRole, ROLE_LABELS } from "@/types/user"
+
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
-import { type UserProfile, UserRole, ROLE_LABELS } from "@/types/user"
-import { UserService } from "@/lib/user-service"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Separator } from "@/components/ui/separator"
+import { InputMask } from "@/components/ui/input-mask"
 import { ThemeToggle } from "@/components/theme-toggle"
-import { ArrowLeft, Users, UserCheck, UserX, RefreshCw } from "lucide-react"
-import Link from "next/link"
+import { ArrowLeft, Users, UserCheck, UserX, RefreshCw, Plus, Edit, Eye, EyeOff } from "lucide-react"
+
+// --- DIÁLOGO PARA UTILIZADORES ---
+function UserDialog({ open, onOpenChange, onSave, user, adminUid }: { open: boolean, onOpenChange: (open: boolean) => void, onSave: () => void, user?: UserProfile | null, adminUid?: string }) {
+    const [formData, setFormData] = useState({
+        displayName: '', email: '', password: '', confirmPassword: '', role: UserRole.SOLICITANTE,
+        telefone: '', cpf: ''
+    });
+    const [isSaving, setIsSaving] = useState(false);
+    const [error, setError] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
+
+    const isEditMode = !!user;
+
+    useEffect(() => {
+        if (user) {
+            setFormData({
+                displayName: user.displayName,
+                email: user.email,
+                password: '',
+                confirmPassword: '',
+                role: user.role,
+                telefone: user.additionalInfo?.telefone || '',
+                cpf: user.additionalInfo?.cpf || '',
+            });
+        } else {
+            setFormData({
+                displayName: '', email: '', password: '', confirmPassword: '', role: UserRole.SOLICITANTE,
+                telefone: '', cpf: ''
+            });
+        }
+        setError('');
+    }, [user, open]);
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setError('');
+
+        if (!isEditMode && formData.password !== formData.confirmPassword) {
+            return setError("As senhas não coincidem.");
+        }
+        if (!isEditMode && formData.password.length < 6) {
+            return setError("A senha deve ter pelo menos 6 caracteres.");
+        }
+
+        setIsSaving(true);
+        try {
+            const additionalInfo = {
+                telefone: formData.telefone,
+                cpf: formData.cpf,
+            };
+
+            if (isEditMode) {
+                if (!user) return;
+                await UserService.updateUserProfile(user.uid, {
+                    displayName: formData.displayName,
+                    role: formData.role,
+                    additionalInfo,
+                    updatedBy: adminUid,
+                });
+            } else {
+                if (!adminUid) throw new Error("Admin UID não encontrado.");
+                await UserService.createNewAuthUserAndProfile({
+                    email: formData.email,
+                    password: formData.password,
+                    displayName: formData.displayName,
+                    role: formData.role,
+                    additionalInfo,
+                }, adminUid);
+            }
+            onSave();
+            onOpenChange(false);
+        } catch (err) {
+            console.error("Erro ao salvar utilizador:", err);
+            setError(err instanceof Error ? err.message : "Ocorreu um erro desconhecido.");
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="sm:max-w-[600px]">
+                <DialogHeader>
+                    <DialogTitle>{isEditMode ? 'Editar Utilizador' : 'Adicionar Novo Utilizador'}</DialogTitle>
+                    <DialogDescription>Preencha as informações do utilizador.</DialogDescription>
+                </DialogHeader>
+                {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+                <form onSubmit={handleSubmit} id="user-form" className="space-y-4 py-4 max-h-[70vh] overflow-y-auto pr-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2 md:col-span-2"><h3 className="font-medium">Dados de Acesso</h3><Separator /></div>
+                        <div className="space-y-2"><Label htmlFor="displayName">Nome completo *</Label><Input id="displayName" value={formData.displayName} onChange={(e) => setFormData({ ...formData, displayName: e.target.value })} required /></div>
+                        <div className="space-y-2"><Label htmlFor="email">Email *</Label><Input id="email" type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} required disabled={isEditMode} /></div>
+                        {!isEditMode && (
+                            <>
+                                <div className="space-y-2"><Label htmlFor="password">Senha *</Label><div className="relative"><Input id="password" type={showPassword ? "text" : "password"} value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} required={!isEditMode} placeholder="Mínimo 6 caracteres" /><Button type="button" variant="ghost" size="sm" className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent" onClick={() => setShowPassword(!showPassword)}>{showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</Button></div></div>
+                                <div className="space-y-2"><Label htmlFor="confirmPassword">Confirmar senha *</Label><Input id="confirmPassword" type="password" value={formData.confirmPassword} onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })} required /></div>
+                            </>
+                        )}
+                        <div className="space-y-2 md:col-span-2"><h3 className="font-medium">Dados Pessoais</h3><Separator /></div>
+                        <div className="space-y-2"><Label htmlFor="telefone">Telefone *</Label><InputMask id="telefone" mask="(99) 99999-9999" value={formData.telefone} onChange={(e) => setFormData({ ...formData, telefone: e.target.value })} required /></div>
+                        <div className="space-y-2"><Label htmlFor="cpf">CPF</Label><InputMask id="cpf" mask="999.999.999-99" value={formData.cpf} onChange={(e) => setFormData({ ...formData, cpf: e.target.value })} /></div>
+                        <div className="space-y-2 md:col-span-2"><h3 className="font-medium">Perfil e Permissões</h3><Separator /></div>
+                        <div className="space-y-2"><Label htmlFor="role">Perfil do Utilizador *</Label><Select value={formData.role} onValueChange={(value: UserRole) => setFormData({ ...formData, role: value })} required><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{Object.values(UserRole).map((roleOption) => (<SelectItem key={roleOption} value={roleOption}>{ROLE_LABELS[roleOption]}</SelectItem>))}</SelectContent></Select></div>
+                    </div>
+                </form>
+                <DialogFooter>
+                    <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
+                    <Button type="submit" form="user-form" disabled={isSaving}>{isSaving ? "Salvando..." : "Salvar"}</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
 
 function UsersManagement() {
     const { userProfile } = useUser()
@@ -23,14 +143,17 @@ function UsersManagement() {
     const [updating, setUpdating] = useState<string | null>(null)
     const [message, setMessage] = useState("")
 
+    const [isDialogOpen, setIsDialogOpen] = useState(false);
+    const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
+
     const loadUsers = async () => {
         try {
             setLoading(true)
             const allUsers = await UserService.getAllUsers()
             setUsers(allUsers)
         } catch (error) {
-            console.error("Erro ao carregar usuários:", error)
-            setMessage("Erro ao carregar usuários")
+            console.error("Erro ao carregar utilizadores:", error)
+            setMessage("Erro ao carregar utilizadores")
         } finally {
             setLoading(false)
         }
@@ -40,36 +163,26 @@ function UsersManagement() {
         loadUsers()
     }, [])
 
-    const handleRoleChange = async (userId: string, newRole: UserRole) => {
-        if (!userProfile || !userProfile.uid) {
-            setMessage("Erro: Perfil do administrador não carregado corretamente. Tente recarregar a página.");
-            return;
-        }
+    const handleEdit = (user: UserProfile) => {
+        setSelectedUser(user);
+        setIsDialogOpen(true);
+    };
 
-        try {
-            setUpdating(userId)
-            await UserService.updateUserRole(userId, newRole, userProfile.uid)
-            await loadUsers()
-            setMessage(`Perfil atualizado com sucesso`)
-            setTimeout(() => setMessage(""), 3000)
-        } catch (error) {
-            console.error("Erro ao atualizar perfil:", error)
-            setMessage("Erro ao atualizar perfil")
-        } finally {
-            setUpdating(null)
-        }
-    }
+    const handleAdd = () => {
+        setSelectedUser(null);
+        setIsDialogOpen(true);
+    };
 
     const toggleUserStatus = async (userId: string, currentStatus: boolean) => {
         try {
             setUpdating(userId)
-            await UserService.updateUserProfile(userId, { isActive: !currentStatus })
+            await UserService.updateUserProfile(userId, { isActive: !currentStatus, updatedBy: userProfile?.uid })
             await loadUsers()
-            setMessage(`Usuário ${!currentStatus ? "ativado" : "desativado"} com sucesso`)
+            setMessage(`Utilizador ${!currentStatus ? "ativado" : "desativado"} com sucesso`)
             setTimeout(() => setMessage(""), 3000)
         } catch (error) {
             console.error("Erro ao alterar status:", error)
-            setMessage("Erro ao alterar status do usuário")
+            setMessage("Erro ao alterar status do utilizador")
         } finally {
             setUpdating(null)
         }
@@ -87,7 +200,7 @@ function UsersManagement() {
                                     Voltar
                                 </Link>
                             </Button>
-                            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Gerenciar Usuários</h1>
+                            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Gerir Utilizadores</h1>
                         </div>
                         <div className="flex items-center space-x-4">
                             <ThemeToggle />
@@ -109,25 +222,21 @@ function UsersManagement() {
                     )}
 
                     <Card>
-                        <CardHeader>
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <CardTitle className="flex items-center gap-2">
-                                        <Users className="h-5 w-5" />
-                                        Usuários do Sistema
-                                    </CardTitle>
-                                    <CardDescription>Gerencie perfis e permissões dos usuários</CardDescription>
-                                </div>
-                                <Badge variant="secondary">
-                                    {users.length} usuário{users.length !== 1 ? "s" : ""}
-                                </Badge>
+                        <CardHeader className="flex flex-row items-center justify-between">
+                            <div>
+                                <CardTitle className="flex items-center gap-2">
+                                    <Users className="h-5 w-5" />
+                                    Utilizadores do Sistema
+                                </CardTitle>
+                                <CardDescription>Gerencie perfis e permissões dos utilizadores</CardDescription>
                             </div>
+                            <Button onClick={handleAdd}><Plus className="h-4 w-4 mr-2" />Adicionar Utilizador</Button>
                         </CardHeader>
                         <CardContent>
                             {loading ? (
                                 <div className="text-center py-8">
                                     <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-4" />
-                                    <p>Carregando usuários...</p>
+                                    <p>A carregar utilizadores...</p>
                                 </div>
                             ) : (
                                 <Table>
@@ -147,7 +256,7 @@ function UsersManagement() {
                                                 <TableCell className="font-medium">{user.displayName}</TableCell>
                                                 <TableCell>{user.email}</TableCell>
                                                 <TableCell>
-                                                    <UserRoleBadge role={user.role} />
+                                                    <Badge variant="outline">{ROLE_LABELS[user.role]}</Badge>
                                                 </TableCell>
                                                 <TableCell>
                                                     <Badge variant={user.isActive ? "default" : "secondary"}>
@@ -157,26 +266,12 @@ function UsersManagement() {
                                                 <TableCell>{user.createdAt.toLocaleDateString("pt-BR")}</TableCell>
                                                 <TableCell>
                                                     <div className="flex items-center space-x-2">
-                                                        <Select
-                                                            value={user.role}
-                                                            onValueChange={(value: UserRole) => handleRoleChange(user.uid, value)}
-                                                            disabled={updating === user.uid || user.uid === userProfile?.uid}
-                                                        >
-                                                            <SelectTrigger className="w-40">
-                                                                <SelectValue />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                {Object.values(UserRole).map((role) => (
-                                                                    <SelectItem key={role} value={role}>
-                                                                        {ROLE_LABELS[role]}
-                                                                    </SelectItem>
-                                                                ))}
-                                                            </SelectContent>
-                                                        </Select>
-
+                                                        <Button variant="outline" size="icon" onClick={() => handleEdit(user)} disabled={user.uid === userProfile?.uid}>
+                                                            <Edit className="h-4 w-4" />
+                                                        </Button>
                                                         <Button
                                                             variant="outline"
-                                                            size="sm"
+                                                            size="icon"
                                                             onClick={() => toggleUserStatus(user.uid, user.isActive)}
                                                             disabled={updating === user.uid || user.uid === userProfile?.uid}
                                                         >
@@ -193,14 +288,23 @@ function UsersManagement() {
                     </Card>
                 </div>
             </main>
+            <UserDialog
+                open={isDialogOpen}
+                onOpenChange={setIsDialogOpen}
+                onSave={loadUsers}
+                user={selectedUser}
+                adminUid={userProfile?.uid}
+            />
         </div>
     )
 }
 
 export default function UsersPage() {
     return (
-        <RoleGuard allowedRoles={[UserRole.ADMINISTRADOR]}>
-            <UsersManagement />
-        </RoleGuard>
+        <AuthGuard>
+            <RoleGuard allowedRoles={[UserRole.ADMINISTRADOR]}>
+                <UsersManagement />
+            </RoleGuard>
+        </AuthGuard>
     )
 }

@@ -1,5 +1,7 @@
-import { collection, doc, getDoc, setDoc, updateDoc, query, where, getDocs, orderBy, limit } from "firebase/firestore"
-import { db } from "@/lib/firebase"
+import { initializeApp, deleteApp, FirebaseError } from "firebase/app"
+import { getAuth, createUserWithEmailAndPassword } from "firebase/auth"
+import { collection, doc, getDoc, setDoc, updateDoc, query, getDocs, orderBy } from "firebase/firestore"
+import { db, firebaseConfig } from "@/lib/firebase"
 import { type UserProfile, UserRole } from "@/types/user"
 
 export class UserService {
@@ -24,8 +26,43 @@ export class UserService {
             isActive: true,
             additionalInfo,
         }
-
         await setDoc(doc(db, this.COLLECTION, uid), userProfile)
+    }
+
+    static async createNewAuthUserAndProfile(
+        { email, password, displayName, role, additionalInfo }: Omit<UserProfile, 'uid' | 'createdAt' | 'updatedAt' | 'isActive'> & { password?: string },
+        adminUid: string
+    ): Promise<void> {
+        if (!password) {
+            throw new Error("A senha é obrigatória para criar um novo utilizador.");
+        }
+
+        const tempAppName = `temp-app-${Date.now()}`;
+        const tempApp = initializeApp(firebaseConfig, tempAppName);
+        const tempAuth = getAuth(tempApp);
+
+        try {
+            const userCredential = await createUserWithEmailAndPassword(tempAuth, email, password);
+            const newUserUid = userCredential.user.uid;
+            await this.createUserProfile(newUserUid, email, displayName, role, adminUid, additionalInfo);
+        } catch (error) {
+            console.error("Erro ao criar novo utilizador:", error);
+            if (error instanceof FirebaseError) {
+                switch (error.code) {
+                    case 'auth/email-already-in-use':
+                        throw new Error('Este email já está em uso.');
+                    case 'auth/weak-password':
+                        throw new Error('A senha deve ter pelo menos 6 caracteres.');
+                    case 'auth/invalid-email':
+                        throw new Error('O formato do email é inválido.');
+                    default:
+                        throw new Error('Ocorreu um erro de autenticação. Por favor, tente novamente.');
+                }
+            }
+            throw new Error('Não foi possível criar o utilizador devido a um erro inesperado.');
+        } finally {
+            await deleteApp(tempApp);
+        }
     }
 
     static async getUserProfile(uid: string): Promise<UserProfile | null> {
@@ -36,28 +73,18 @@ export class UserService {
             if (docSnap.exists()) {
                 const data = docSnap.data()
                 return {
-                    uid: docSnap.id, // Adiciona o ID do documento como 'uid'
+                    uid: docSnap.id,
                     ...data,
                     createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt),
                     updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : new Date(data.updatedAt),
                 } as UserProfile
             } else {
-                console.log("Nenhum documento encontrado para UID:", uid)
                 return null
             }
         } catch (error) {
-            console.error("Erro ao buscar perfil do usuÃ¡rio:", error)
+            console.error("Erro ao buscar perfil do utilizador:", error)
             return null
         }
-    }
-
-    static async updateUserRole(uid: string, newRole: UserRole, updatedBy: string): Promise<void> {
-        const docRef = doc(db, this.COLLECTION, uid)
-        await updateDoc(docRef, {
-            role: newRole,
-            updatedAt: new Date(),
-            updatedBy,
-        })
     }
 
     static async updateUserProfile(uid: string, updates: Partial<UserProfile>): Promise<void> {
@@ -75,39 +102,11 @@ export class UserService {
         return querySnapshot.docs.map((doc) => {
             const data = doc.data()
             return {
-                uid: doc.id, // Adicionado para consistência
+                uid: doc.id,
                 ...data,
                 createdAt: data.createdAt.toDate(),
                 updatedAt: data.updatedAt.toDate(),
             } as UserProfile
         })
-    }
-
-    static async getUsersByRole(role: UserRole): Promise<UserProfile[]> {
-        const q = query(collection(db, this.COLLECTION), where("role", "==", role), where("isActive", "==", true))
-
-        const querySnapshot = await getDocs(q)
-        return querySnapshot.docs.map((doc) => {
-            const data = doc.data()
-            return {
-                ...data,
-                createdAt: data.createdAt.toDate(),
-                updatedAt: data.updatedAt.toDate(),
-            } as UserProfile
-        })
-    }
-
-    static async checkIfFirstUser(): Promise<boolean> {
-        const q = query(collection(db, this.COLLECTION), limit(1))
-        const querySnapshot = await getDocs(q)
-        return querySnapshot.empty
-    }
-
-    static async initializeFirstAdmin(uid: string, email: string, displayName: string): Promise<void> {
-        const isFirstUser = await this.checkIfFirstUser()
-
-        if (isFirstUser) {
-            await this.createUserProfile(uid, email, displayName, UserRole.ADMINISTRADOR, "system", { telefone: "", cpf: "" })
-        }
     }
 }

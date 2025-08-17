@@ -13,6 +13,7 @@ export interface UserProfile {
     createdAt: Date
     updatedAt: Date
     createdBy?: string
+    updatedBy?: string
     isActive: boolean
     additionalInfo?: {
         cpf?: string
