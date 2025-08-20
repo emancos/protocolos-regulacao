@@ -9,8 +9,8 @@ import { UserProvider } from "@/contexts/user-context"
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "Next.js Firebase Auth",
-  description: "Sistema de autenticação com Next.js e Firebase",
+  title: "SMS - Gerenciamento de Protocolos",
+  description: "Sistema de gerenciamento de protocolos - Setor de Regulação",
 }
 
 export default function RootLayout({
