@@ -1,12 +1,14 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Plus, Trash2, Search } from "lucide-react"
-import { COMMON_PROCEDURES, type ProcedureItem } from "@/types/procedures"
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
+import { Plus, Trash2, Search, Loader2 } from "lucide-react"
+import { ProcedureService, type Procedure, type ProcedureGroup } from "@/lib/procedure-service"
+import { type ProcedureItem } from "@/types/procedures"
 import { Separator } from "@/components/ui/separator"
 
 const FieldError = ({ messages }: { messages?: string[] }) => {
@@ -15,49 +17,90 @@ const FieldError = ({ messages }: { messages?: string[] }) => {
     }
     return <p className="text-sm font-medium text-destructive mt-2">{messages[0]}</p>;
 };
+
 interface ProcedureSelectorProps {
     procedures: ProcedureItem[]
     onChange: (procedures: ProcedureItem[]) => void
-    error?: string[]    
+    error?: string[]
 }
-
 
 export function ProcedureSelector({ procedures, onChange, error }: ProcedureSelectorProps) {
     const [searchTerm, setSearchTerm] = useState("")
     const [customProcedure, setCustomProcedure] = useState("")
+    const [allProcedures, setAllProcedures] = useState<Procedure[]>([]);
+    const [groups, setGroups] = useState<ProcedureGroup[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [openAccordionItems, setOpenAccordionItems] = useState<string[]>([]);
 
-    const filteredProcedures = COMMON_PROCEDURES.filter((procedure: string) =>
-        procedure.toLowerCase().includes(searchTerm.toLowerCase()),
-    )
+    useEffect(() => {
+        const fetchData = async () => {
+            setLoading(true);
+            const [groupsData, proceduresData] = await Promise.all([
+                ProcedureService.getAllProcedureGroups(),
+                ProcedureService.getAllProcedures()
+            ]);
+            setGroups(groupsData);
+            setAllProcedures(proceduresData);
+            setLoading(false);
+        };
+        fetchData();
+    }, []);
 
-    const addProcedure = (procedureName: string) => {
-        // Verifica se o procedimento já foi adicionado
-        if (procedures.some((p) => p.name === procedureName)) {
-            return
+    const groupedAndFilteredProcedures = useMemo(() => {
+        if (loading) return [];
+
+        const lowerCaseSearchTerm = searchTerm.toLowerCase();
+
+        return groups.map(group => {
+            const filtered = allProcedures.filter(proc =>
+                proc.groupId === group.id && proc.name.toLowerCase().includes(lowerCaseSearchTerm)
+            );
+            return { ...group, procedures: filtered };
+        }).filter(group => group.procedures.length > 0); // Só mostra grupos que têm resultados
+    }, [searchTerm, allProcedures, groups, loading]);
+
+    useEffect(() => {
+        if (searchTerm) {
+            // Abre todos os acordeões que têm resultados de pesquisa
+            setOpenAccordionItems(groupedAndFilteredProcedures.map(g => g.id));
+        } else {
+            // Fecha todos quando a pesquisa é limpa
+            setOpenAccordionItems([]);
         }
+    }, [searchTerm, groupedAndFilteredProcedures]);
 
+
+    const addProcedure = (procedure: Procedure) => {
+        if (procedures.some((p) => p.name === procedure.name)) {
+            return;
+        }
         const newProcedure: ProcedureItem = {
-            id: Date.now().toString(),
-            name: procedureName,
+            id: procedure.id, // Usa o ID do Firebase
+            name: procedure.name,
             quantity: 1,
-        }
-        onChange([...procedures, newProcedure])
-    }
+        };
+        onChange([...procedures, newProcedure]);
+    };
 
     const addCustomProcedure = () => {
         if (customProcedure.trim() && !procedures.some((p) => p.name === customProcedure.trim())) {
-            addProcedure(customProcedure.trim())
-            setCustomProcedure("")
+            const newCustomProcedure: ProcedureItem = {
+                id: `custom-${Date.now()}`,
+                name: customProcedure.trim(),
+                quantity: 1,
+            };
+            onChange([...procedures, newCustomProcedure]);
+            setCustomProcedure("");
         }
-    }
+    };
 
     const removeProcedure = (id: string) => {
-        onChange(procedures.filter((p) => p.id !== id))
-    }
+        onChange(procedures.filter((p) => p.id !== id));
+    };
 
     const updateProcedureQuantity = (id: string, quantity: number) => {
-        onChange(procedures.map((p) => (p.id === id ? { ...p, quantity: Math.max(1, quantity) } : p)))
-    }
+        onChange(procedures.map((p) => (p.id === id ? { ...p, quantity: Math.max(1, quantity) } : p)));
+    };
 
     return (
         <div className="space-y-4">
@@ -71,31 +114,17 @@ export function ProcedureSelector({ procedures, onChange, error }: ProcedureSele
 
             <FieldError messages={error} />
 
-            {/* Lista de procedimentos selecionados */}
             {procedures.length > 0 && (
                 <div className="space-y-3">
                     <h4 className="font-medium text-sm">Procedimentos Selecionados:</h4>
                     {procedures.map((procedure) => (
                         <Card key={procedure.id} className="p-4">
                             <div className="flex items-center justify-between">
-                                <div className="flex-1">
-                                    <p className="font-medium">{procedure.name}</p>
-                                </div>
+                                <p className="font-medium flex-1 pr-4">{procedure.name}</p>
                                 <div className="flex items-center space-x-2">
-                                    <Label htmlFor={`quantity-${procedure.id}`} className="text-sm">
-                                        Qtd:
-                                    </Label>
-                                    <Input
-                                        id={`quantity-${procedure.id}`}
-                                        type="number"
-                                        min="1"
-                                        value={procedure.quantity}
-                                        onChange={(e) => updateProcedureQuantity(procedure.id, Number.parseInt(e.target.value) || 1)}
-                                        className="w-16"
-                                    />
-                                    <Button type="button" onClick={() => removeProcedure(procedure.id)} variant="ghost" size="icon">
-                                        <Trash2 className="h-4 w-4 text-red-500" />
-                                    </Button>
+                                    <Label htmlFor={`quantity-${procedure.id}`} className="text-sm">Qtd:</Label>
+                                    <Input id={`quantity-${procedure.id}`} type="number" min="1" value={procedure.quantity} onChange={(e) => updateProcedureQuantity(procedure.id, Number.parseInt(e.target.value) || 1)} className="w-16" />
+                                    <Button type="button" onClick={() => removeProcedure(procedure.id)} variant="ghost" size="icon"><Trash2 className="h-4 w-4 text-red-500" /></Button>
                                 </div>
                             </div>
                         </Card>
@@ -103,80 +132,60 @@ export function ProcedureSelector({ procedures, onChange, error }: ProcedureSele
                 </div>
             )}
 
-            {/* Seleção de procedimentos comuns */}
             <Card>
                 <CardHeader>
                     <CardTitle className="text-base">Selecionar Procedimentos</CardTitle>
                 </CardHeader>
                 <CardContent>
                     <div className="space-y-4">
-                        {/* Campo de busca */}
                         <div className="relative">
-                            <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-500" />
-                            <Input
-                                placeholder="Buscar procedimento..."
-                                className="pl-8"
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                            />
+                            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                            <Input placeholder="Buscar procedimento por nome..." className="pl-8" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
                         </div>
 
-                        {/* Campo para procedimento personalizado */}
                         <div className="flex space-x-2">
-                            <Input
-                                placeholder="Ou digite um procedimento personalizado..."
-                                value={customProcedure}
-                                onChange={(e) => setCustomProcedure(e.target.value)}
-                                onKeyPress={(e) => {
-                                    if (e.key === "Enter") {
-                                        e.preventDefault()
-                                        addCustomProcedure()
-                                    }
-                                }}
-                            />
-                            <Button
-                                type="button"
-                                onClick={addCustomProcedure}
-                                disabled={!customProcedure.trim() || procedures.some((p) => p.name === customProcedure.trim())}
-                            >
-                                <Plus className="h-4 w-4 mr-1" />
-                                Adicionar
+                            <Input placeholder="Ou digite um procedimento personalizado..." value={customProcedure} onChange={(e) => setCustomProcedure(e.target.value)} onKeyPress={(e) => { if (e.key === "Enter") { e.preventDefault(); addCustomProcedure(); } }} />
+                            <Button type="button" onClick={addCustomProcedure} disabled={!customProcedure.trim() || procedures.some((p) => p.name === customProcedure.trim())}>
+                                <Plus className="h-4 w-4 mr-1" /> Adicionar
                             </Button>
                         </div>
 
                         <Separator />
 
-                        {/* Lista de procedimentos comuns */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 max-h-60 overflow-y-auto">
-                            {filteredProcedures.slice(0, 30).map((procedure) => {
-                                const isSelected = procedures.some((p) => p.name === procedure)
-                                return (
-                                    <Button
-                                        key={procedure}
-                                        type="button"
-                                        variant={isSelected ? "default" : "outline"}
-                                        size="sm"
-                                        onClick={() => addProcedure(procedure)}
-                                        className="justify-start text-left h-auto p-2 text-xs"
-                                        disabled={isSelected}
-                                    >
-                                        {isSelected && <Plus className="h-3 w-3 mr-1" />}
-                                        {procedure}
-                                    </Button>
-                                )
-                            })}
-                        </div>
-
-                        {filteredProcedures.length > 30 && (
-                            <p className="text-xs text-gray-500 mt-2">
-                                Mostrando 30 de {filteredProcedures.length} procedimentos. Use a busca para refinar.
-                            </p>
+                        {loading ? (
+                            <div className="flex justify-center items-center h-40"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
+                        ) : (
+                            <Accordion type="multiple" value={openAccordionItems} onValueChange={setOpenAccordionItems} className="w-full max-h-80 overflow-y-auto pr-2">
+                                {groupedAndFilteredProcedures.map(group => (
+                                    <AccordionItem value={group.id} key={group.id}>
+                                        <AccordionTrigger className="text-sm font-semibold">{group.name} ({group.procedures.length})</AccordionTrigger>
+                                        <AccordionContent>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                                                {group.procedures.map((procedure) => {
+                                                    const isSelected = procedures.some((p) => p.name === procedure.name);
+                                                    return (
+                                                        <Button
+                                                            key={procedure.id}
+                                                            type="button"
+                                                            variant={isSelected ? "default" : "outline"}
+                                                            size="sm"
+                                                            onClick={() => addProcedure(procedure)}
+                                                            className="justify-start text-left h-auto p-2 text-xs"
+                                                            disabled={isSelected}
+                                                        >
+                                                            {procedure.name}
+                                                        </Button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </AccordionContent>
+                                    </AccordionItem>
+                                ))}
+                            </Accordion>
                         )}
 
-                        {filteredProcedures.length === 0 && searchTerm && (
-                            <p className="text-sm text-gray-500 text-center py-4">
-                                Nenhum procedimento encontrado para &quot;{searchTerm}&quot;
-                            </p>
+                        {groupedAndFilteredProcedures.length === 0 && searchTerm && !loading && (
+                            <p className="text-sm text-muted-foreground text-center py-4">Nenhum procedimento encontrado para &quot;{searchTerm}&quot;</p>
                         )}
                     </div>
                 </CardContent>
