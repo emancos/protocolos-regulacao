@@ -33,6 +33,7 @@ export const ROLE_PERMISSIONS = {
         canGenerateReports: true,
         canManageSystem: true,
         canManageHealthUnits: true,
+        canManageProcedures: true,
     },
     [UserRole.SOLICITANTE_REGULADO]: {
         canCreateUsers: false,
@@ -42,6 +43,7 @@ export const ROLE_PERMISSIONS = {
         canGenerateReports: true,
         canManageSystem: false,
         canManageHealthUnits: false,
+        canManageProcedures: false,
     },
     [UserRole.SOLICITANTE]: {
         canCreateUsers: false,
@@ -51,6 +53,7 @@ export const ROLE_PERMISSIONS = {
         canGenerateReports: false,
         canManageSystem: false,
         canManageHealthUnits: false,
+        canManageProcedures: false,
     },
     [UserRole.PACIENTE]: {
         canCreateUsers: false,
@@ -60,6 +63,7 @@ export const ROLE_PERMISSIONS = {
         canGenerateReports: false,
         canManageSystem: false,
         canManageHealthUnits: false,
+        canManageProcedures: false,
     },
 }
 
