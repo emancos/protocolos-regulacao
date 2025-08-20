@@ -3,10 +3,9 @@
 import { useState, useEffect, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
-import { Plus, Trash2, Search, Loader2 } from "lucide-react"
+import { Trash2, Search, Loader2 } from "lucide-react"
 import { ProcedureService, type Procedure, type ProcedureGroup } from "@/lib/procedure-service"
 import { type ProcedureItem } from "@/types/procedures"
 import { Separator } from "@/components/ui/separator"
@@ -26,7 +25,6 @@ interface ProcedureSelectorProps {
 
 export function ProcedureSelector({ procedures, onChange, error }: ProcedureSelectorProps) {
     const [searchTerm, setSearchTerm] = useState("")
-    const [customProcedure, setCustomProcedure] = useState("")
     const [allProcedures, setAllProcedures] = useState<Procedure[]>([]);
     const [groups, setGroups] = useState<ProcedureGroup[]>([]);
     const [loading, setLoading] = useState(true);
@@ -82,24 +80,8 @@ export function ProcedureSelector({ procedures, onChange, error }: ProcedureSele
         onChange([...procedures, newProcedure]);
     };
 
-    const addCustomProcedure = () => {
-        if (customProcedure.trim() && !procedures.some((p) => p.name === customProcedure.trim())) {
-            const newCustomProcedure: ProcedureItem = {
-                id: `custom-${Date.now()}`,
-                name: customProcedure.trim(),
-                quantity: 1,
-            };
-            onChange([...procedures, newCustomProcedure]);
-            setCustomProcedure("");
-        }
-    };
-
     const removeProcedure = (id: string) => {
         onChange(procedures.filter((p) => p.id !== id));
-    };
-
-    const updateProcedureQuantity = (id: string, quantity: number) => {
-        onChange(procedures.map((p) => (p.id === id ? { ...p, quantity: Math.max(1, quantity) } : p)));
     };
 
     return (
@@ -121,10 +103,8 @@ export function ProcedureSelector({ procedures, onChange, error }: ProcedureSele
                         <Card key={procedure.id} className="p-4">
                             <div className="flex items-center justify-between">
                                 <p className="font-medium flex-1 pr-4">{procedure.name}</p>
-                                <div className="flex items-center space-x-2">
-                                    <Label htmlFor={`quantity-${procedure.id}`} className="text-sm">Qtd:</Label>
-                                    <Input id={`quantity-${procedure.id}`} type="number" min="1" value={procedure.quantity} onChange={(e) => updateProcedureQuantity(procedure.id, Number.parseInt(e.target.value) || 1)} className="w-16" />
-                                    <Button type="button" onClick={() => removeProcedure(procedure.id)} variant="ghost" size="icon"><Trash2 className="h-4 w-4 text-red-500" /></Button>
+                                <div className="flex items-center space-x-1">
+                                    <Button type="button" onClick={() => removeProcedure(procedure.id)} variant="outline">Remover: <Trash2 className="h-4 w-4 text-red-500" /></Button>
                                 </div>
                             </div>
                         </Card>
@@ -141,13 +121,6 @@ export function ProcedureSelector({ procedures, onChange, error }: ProcedureSele
                         <div className="relative">
                             <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                             <Input placeholder="Buscar procedimento por nome..." className="pl-8" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
-                        </div>
-
-                        <div className="flex space-x-2">
-                            <Input placeholder="Ou digite um procedimento personalizado..." value={customProcedure} onChange={(e) => setCustomProcedure(e.target.value)} onKeyPress={(e) => { if (e.key === "Enter") { e.preventDefault(); addCustomProcedure(); } }} />
-                            <Button type="button" onClick={addCustomProcedure} disabled={!customProcedure.trim() || procedures.some((p) => p.name === customProcedure.trim())}>
-                                <Plus className="h-4 w-4 mr-1" /> Adicionar
-                            </Button>
                         </div>
 
                         <Separator />
@@ -170,7 +143,7 @@ export function ProcedureSelector({ procedures, onChange, error }: ProcedureSele
                                                             variant={isSelected ? "default" : "outline"}
                                                             size="sm"
                                                             onClick={() => addProcedure(procedure)}
-                                                            className="justify-start text-left h-auto p-2 text-xs"
+                                                            className="justify-start text-left h-auto p-2 text-xs whitespace-normal"
                                                             disabled={isSelected}
                                                         >
                                                             {procedure.name}
