@@ -85,9 +85,17 @@ export interface Requisition {
 export const PRIORITY_LABELS = {
     [Priority.P1]: "P1 - Emergência",
     [Priority.P2]: "P2 - Urgência",
-    [Priority.P3]: "P3 - Eletivo Prioritário",
+    [Priority.P3]: "P3 - Prioritário",
     [Priority.P4]: "P4 - Eletivo",
 }
+
+export const PRIORITY_COLORS = {
+    [Priority.P1]: "bg-red-500 text-black",
+    [Priority.P2]: "bg-yellow-500 text-black",
+    [Priority.P3]: "bg-green-500 text-black",
+    [Priority.P4]: "bg-blue-500 text-black",
+}
+
 
 export const STATUS_LABELS = {
     [Status.PENDENTE]: "Pendente",
