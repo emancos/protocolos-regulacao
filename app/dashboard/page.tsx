@@ -7,7 +7,7 @@ import { UserRoleBadge } from "@/components/user-role-badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { LogOut, User, Mail, Users, Settings, Hospital } from "lucide-react"
+import { LogOut, User, Mail, Users, Settings, Hospital, SquareActivity } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
 import Link from "next/link"
 import { DebugUserInfo } from "@/components/debug-user-info"
@@ -125,6 +125,15 @@ function DashboardContent() {
                                         <Link href="/admin/health-units">
                                             <Hospital className="h-6 w-6 mb-2" />
                                             <span>Unidades de Saúde</span>
+                                        </Link>
+                                    </Button>
+                                )}
+
+                                {hasPermission("canManageProcedures") && (
+                                    <Button asChild variant="purple" className="h-auto p-4 flex-col">
+                                        <Link href="/admin/procedures">
+                                            <SquareActivity className="h-6 w-6 mb-2" />
+                                            <span>Serviços de Saúde</span>
                                         </Link>
                                     </Button>
                                 )}
