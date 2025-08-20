@@ -22,7 +22,7 @@ import { CalendarIcon, Plus, Trash2, ArrowLeft, AlertTriangle, Building, User, M
 import { cn } from "@/lib/utils"
 import { RequisitionService } from "@/lib/requisition-service"
 import { HealthDataService } from "@/lib/health-data-service"
-import { Priority, Status, PRIORITY_LABELS } from "@/types/requisitions"
+import { Priority, Status, PRIORITY_LABELS, PRIORITY_COLORS } from "@/types/requisitions"
 import type { HealthUnit, HealthAgent } from "@/types/health-data"
 import Link from "next/link"
 import { ThemeToggle } from "@/components/theme-toggle"
@@ -57,7 +57,7 @@ type FormErrors = z.inferFlattenedErrors<typeof requisitionSchema>['fieldErrors'
 interface ImageFile { id: string; file?: File; preview?: string; name: string; size: number; url?: string; uploaded?: boolean; uploading?: boolean; error?: string; oneDriveId?: string; }
 interface FormState { protocol: string; patientName: string; priority: Priority; susCard: string; receivedDate: Date; phones: string[]; status: Status; healthUnitId: string; healthAgentId: string; procedures: ProcedureItem[]; images: ImageFile[]; availableAgents: HealthAgent[]; loading: boolean; errors: FormErrors; }
 type FormAction = | { type: 'SET_FIELD'; field: keyof Omit<FormState, 'phones' | 'procedures' | 'images'>; payload: unknown } | { type: 'SET_PROTOCOL'; payload: string } | { type: 'ADD_PHONE' } | { type: 'REMOVE_PHONE'; payload: number } | { type: 'UPDATE_PHONE'; payload: { index: number; value: string } } | { type: 'SET_PROCEDURES'; payload: ProcedureItem[] } | { type: 'SET_IMAGES'; payload: ImageFile[] } | { type: 'SET_AVAILABLE_AGENTS'; payload: HealthAgent[] } | { type: 'RESET_AGENTS' } | { type: 'SET_LOADING'; payload: boolean } | { type: 'SET_ERRORS'; payload: FormErrors } | { type: 'CLEAR_ERRORS' };
-const initialState: FormState = { protocol: "", patientName: "", priority: Priority.P3, susCard: "", receivedDate: new Date(), phones: [""], status: Status.PENDENTE, healthUnitId: "", healthAgentId: "", procedures: [], images: [], availableAgents: [], loading: false, errors: {} };
+const initialState: FormState = { protocol: "", patientName: "", priority: Priority.P4, susCard: "", receivedDate: new Date(), phones: [""], status: Status.PENDENTE, healthUnitId: "", healthAgentId: "", procedures: [], images: [], availableAgents: [], loading: false, errors: {} };
 function formReducer(state: FormState, action: FormAction): FormState { switch (action.type) { case 'SET_FIELD': return { ...state, [action.field]: action.payload }; case 'SET_PROTOCOL': return { ...state, protocol: action.payload }; case 'ADD_PHONE': return { ...state, phones: [...state.phones, ""] }; case 'REMOVE_PHONE': return { ...state, phones: state.phones.filter((_, i) => i !== action.payload) }; case 'UPDATE_PHONE': const updatedPhones = [...state.phones]; updatedPhones[action.payload.index] = action.payload.value; return { ...state, phones: updatedPhones }; case 'SET_PROCEDURES': return { ...state, procedures: action.payload }; case 'SET_IMAGES': return { ...state, images: action.payload }; case 'SET_AVAILABLE_AGENTS': return { ...state, availableAgents: action.payload }; case 'RESET_AGENTS': return { ...state, availableAgents: [], healthAgentId: "" }; case 'SET_LOADING': return { ...state, loading: action.payload }; case 'SET_ERRORS': return { ...state, errors: action.payload, loading: false }; case 'CLEAR_ERRORS': return { ...state, errors: {} }; default: return state; } }
 
 // --- STEP COMPONENTS ---
@@ -73,7 +73,6 @@ const Step1 = ({ state, dispatch, errors, healthUnits, healthAgents, loadingUnit
             <div className="md:col-span-2 space-y-2"><h3 className="text-lg font-medium">Dados da Requisição</h3><Separator /></div>
             <div className="space-y-2"><Label htmlFor="protocol">Protocolo *</Label><Input id="protocol" value={state.protocol} disabled className="bg-gray-100 dark:bg-gray-800" /></div>
             <div className="space-y-2"><Label htmlFor="receivedDate">Data de Recebimento *</Label><Popover><PopoverTrigger asChild><Button variant="outline" className={cn("w-full justify-start text-left font-normal", !state.receivedDate && "text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4" />{state.receivedDate ? format(state.receivedDate, "PPP", { locale: ptBR }) : "Selecione uma data"}</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><Calendar mode="single" selected={state.receivedDate} onSelect={(date) => date && dispatch({ type: 'SET_FIELD', field: 'receivedDate', payload: date })} initialFocus locale={ptBR} /></PopoverContent></Popover><FieldError messages={errors.receivedDate} /></div>
-            <div className="space-y-2 md:col-span-2"><Label htmlFor="priority">Prioridade *</Label><Select value={state.priority} onValueChange={(value) => dispatch({ type: 'SET_FIELD', field: 'priority', payload: value as Priority })}><SelectTrigger><SelectValue placeholder="Selecione a prioridade" /></SelectTrigger><SelectContent>{Object.values(Priority).map((p) => (<SelectItem key={p} value={p}>{PRIORITY_LABELS[p]}</SelectItem>))}</SelectContent></Select><FieldError messages={errors.priority} /></div>
 
             {/* Dados do Paciente */}
             <div className="md:col-span-2 space-y-2 mt-4"><h3 className="text-lg font-medium">Dados do Paciente</h3><Separator /></div>
@@ -93,7 +92,36 @@ const Step1 = ({ state, dispatch, errors, healthUnits, healthAgents, loadingUnit
         </div>
     );
 };
-const Step2 = ({ state, dispatch, errors }: { state: FormState, dispatch: React.Dispatch<FormAction>, errors: FormErrors }) => (<div className="animate-in fade-in-50"><ProcedureSelector procedures={state.procedures} onChange={(newProcedures) => dispatch({ type: 'SET_PROCEDURES', payload: newProcedures })} error={errors.procedures} /></div>);
+const Step2 = ({ state, dispatch, errors }: { state: FormState, dispatch: React.Dispatch<FormAction>, errors: FormErrors }) => {
+    return (
+        <>
+            <Label>Prioridade *</Label>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 pt-2">
+                {Object.values(Priority).map((p) => {
+                    const isSelected = state.priority === p;
+                    return (
+                        <Button
+                            key={p}
+                            type="button"
+                            variant={!isSelected ? "outline" : null}
+                            className={cn(
+                                "w-full justify-center transition-all",
+                                isSelected && PRIORITY_COLORS[p],
+                                isSelected && "hover:opacity-90 ring-2 ring-ring ring-offset-2 ring-offset-background"
+                            )}
+                            onClick={() => dispatch({ type: 'SET_FIELD', field: 'priority', payload: p })}
+                        >
+                            {PRIORITY_LABELS[p]}
+                        </Button>
+                    );
+                })}
+            </div>
+            <div className="animate-in fade-in-50">
+                <ProcedureSelector procedures={state.procedures} onChange={(newProcedures) => dispatch({ type: 'SET_PROCEDURES', payload: newProcedures })} error={errors.procedures} />
+            </div>
+        </>
+    )
+};
 const Step3 = ({ state, dispatch, errors }: { state: FormState, dispatch: React.Dispatch<FormAction>, errors: FormErrors }) => (<div className="animate-in fade-in-50"><ImageUpload images={state.images} onChange={(newImages) => dispatch({ type: 'SET_IMAGES', payload: newImages })} protocol={state.protocol} submissionError={errors.images} /></div>);
 
 // --- COMPONENTE PRINCIPAL ---
@@ -180,7 +208,7 @@ function NewRequisitionForm() {
             <header className="bg-white dark:bg-gray-800 shadow">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"><div className="flex justify-between items-center py-6"><div className="flex items-center space-x-4"><Button asChild variant="outline" size="sm"><Link href="/requisitions"><ArrowLeft className="h-4 w-4 mr-2" />Voltar</Link></Button><h1 className="text-3xl font-bold text-gray-900 dark:text-white">Nova Requisição</h1></div><ThemeToggle /></div></div>
             </header>
-            <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+            <main className="max-w-4xl mx-auto py-1 sm:px-6 lg:px-8">
                 <div className="px-4 py-6 sm:px-0">
                     <Card className="w-full">
                         <CardHeader>
