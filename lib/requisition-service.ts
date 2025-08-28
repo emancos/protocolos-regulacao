@@ -235,6 +235,13 @@ export class RequisitionService {
             }
 
             // Criar a requisição no Firestore
+            console.log({
+                ...data,
+                receivedDate: Timestamp.fromDate(data.receivedDate),
+                schedulingHistory: [],
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp(),
+            })
             const docRef = await addDoc(collection(db, "requisitions"), {
                 ...data,
                 receivedDate: Timestamp.fromDate(data.receivedDate),
@@ -381,7 +388,7 @@ export class RequisitionService {
                 scheduledBy: data.scheduledBy,
                 scheduledAt: data.scheduledAt?.toDate(),
                 sisregCode: data.sisregCode,
-                regnutsCode : data.regnutsCode,
+                regnutsCode: data.regnutsCode,
                 schedulingHistory:
                     data.schedulingHistory?.map((history: any) => ({
                         ...history,

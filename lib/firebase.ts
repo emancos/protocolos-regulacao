@@ -1,8 +1,8 @@
-import { initializeApp, getApps } from "firebase/app"
-import { getAuth } from "firebase/auth"
-import { getFirestore } from "firebase/firestore"
-import { getStorage } from "firebase/storage"
-import { getAnalytics, isSupported } from "firebase/analytics"
+import { initializeApp, getApps, type FirebaseApp } from "firebase/app"
+import { getAuth, type Auth } from "firebase/auth"
+import { getFirestore, type Firestore } from "firebase/firestore"
+import { getStorage, type FirebaseStorage } from "firebase/storage"
+import { getAnalytics, isSupported, type Analytics } from "firebase/analytics"
 
 export const firebaseConfig = {
     apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -14,15 +14,27 @@ export const firebaseConfig = {
     measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 }
 
-// Initialize Firebase
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0]
+const app: FirebaseApp = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0]
 
-// Initialize Firebase services
-export const auth = getAuth(app)
-export const db = getFirestore(app)
-export const storage = getStorage(app)
+const auth: Auth = getAuth(app)
+const db: Firestore = getFirestore(app)
+const storage: FirebaseStorage = getStorage(app)
 
-// Initialize Analytics (only in browser and if supported)
-export const analytics = typeof window !== "undefined" && await isSupported() ? getAnalytics(app) : null
+let analytics: Analytics | null = null;
 
-export default app
+// Usamos uma função assíncrona auto-invocável para lidar com a inicialização
+// sem usar 'await' no nível superior do módulo.
+(async () => {
+    if (typeof window !== "undefined") {
+        try {
+            if (await isSupported()) {
+                analytics = getAnalytics(app);
+            }
+        } catch (error) {
+            console.error("Erro ao inicializar o Firebase Analytics:", error);
+        }
+    }
+})();
+
+// Exportamos a variável 'analytics' que será preenchida quando o código rodar no navegador.
+export { app, auth, db, storage, analytics }

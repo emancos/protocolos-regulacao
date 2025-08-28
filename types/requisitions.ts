@@ -27,9 +27,8 @@ export interface ImageFile {
     id: string
     name: string
     size: number
-    url: string
+    url: string // Agora será a URL local, ex: /api/uploads/protocolo/arquivo.jpg
     uploadedAt: Date
-    oneDriveId?: string // ID do arquivo no OneDrive para possível exclusão
 }
 
 export interface SchedulingHistory {
@@ -82,6 +81,7 @@ export interface Requisition {
     schedulingHistory?: SchedulingHistory[]
 }
 
+// ... (o restante do arquivo permanece o mesmo)
 export const PRIORITY_LABELS = {
     [Priority.P1]: "P1 - Emergência",
     [Priority.P2]: "P2 - Urgência",

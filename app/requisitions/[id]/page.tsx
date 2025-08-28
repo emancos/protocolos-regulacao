@@ -310,9 +310,9 @@ function RequisitionDetail() {
                                             <Separator className="my-2" />
                                             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                                                 {requisition.images.map((image, index) => (
-                                                    <div key={index} className="relative group">
+                                                    <div key={index} className="group">
                                                         <a href={image.url} target="_blank" rel="noopener noreferrer">
-                                                            <div className="aspect-square rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800">
+                                                            <div className="relative aspect-square rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800">
                                                                 <ImageWithFallback
                                                                     src={image.url}
                                                                     alt={image.name}

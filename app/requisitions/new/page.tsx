@@ -31,7 +31,18 @@ import { ImageUpload } from "@/components/image-upload"
 import type { ProcedureItem } from "@/types/procedures"
 
 // --- ZOD SCHEMAS ---
-const imageFileSchema = z.object({ id: z.string(), file: z.instanceof(File).optional(), preview: z.string().optional(), name: z.string(), size: z.number(), url: z.string().optional(), uploaded: z.boolean().optional(), uploading: z.boolean().optional(), error: z.string().optional(), oneDriveId: z.string().optional(), });
+const imageFileSchema = z.object({
+    id: z.string(),
+    file: z.instanceof(File).optional(),
+    preview: z.string().optional(),
+    name: z.string(),
+    size: z.number(),
+    url: z.string().optional(),
+    uploaded: z.boolean().optional(),
+    uploading: z.boolean().optional(),
+    error: z.string().optional(),
+});
+
 const requisitionObjectSchema = z.object({
     protocol: z.string().min(1, "Protocolo é obrigatório."),
     patientName: z.string().trim().min(3, "Nome do paciente deve ter ao menos 3 caracteres."),
@@ -43,7 +54,7 @@ const requisitionObjectSchema = z.object({
     healthAgentId: z.string().optional(),
     procedures: z.array(z.object({ id: z.string(), name: z.string(), quantity: z.number() })).min(1, "Pelo menos um procedimento é obrigatório."),
     phones: z.array(z.string()).min(1, "Pelo menos um telefone é obrigatório.").refine(phones => phones.some(phone => phone.trim() !== ""), { message: "Pelo menos um telefone deve ser preenchido.", path: ["phones", 0], }),
-    images: z.array(imageFileSchema).min(1, "É necessário anexar pelo menos uma imagem.").refine((images: z.infer<typeof imageFileSchema>[]) => !images.some(img => img.uploading || (img.file && !img.uploaded) || img.error), { message: "Aguarde a conclusão de todos os uploads ou remova as imagens com erro." }),
+    images: z.array(imageFileSchema).min(1, "É necessário anexar pelo menos uma imagem.").refine((images) => !images.some(img => img.uploading || (img.file && !img.uploaded) || img.error), { message: "Aguarde a conclusão de todos os uploads ou remova as imagens com erro." }),
     availableAgents: z.array(z.any()),
 });
 type RequisitionObjectType = z.infer<typeof requisitionObjectSchema>;
@@ -54,7 +65,7 @@ const step3Schema = requisitionSchema.pick({ images: true });
 type FormErrors = z.inferFlattenedErrors<typeof requisitionSchema>['fieldErrors'] & { general?: string[] };
 
 // --- STATE & REDUCER ---
-interface ImageFile { id: string; file?: File; preview?: string; name: string; size: number; url?: string; uploaded?: boolean; uploading?: boolean; error?: string; oneDriveId?: string; }
+interface ImageFile { id: string; file?: File; preview?: string; name: string; size: number; url?: string; uploaded?: boolean; uploading?: boolean; error?: string; }
 interface FormState { protocol: string; patientName: string; priority: Priority; susCard: string; receivedDate: Date; phones: string[]; status: Status; healthUnitId: string; healthAgentId: string; procedures: ProcedureItem[]; images: ImageFile[]; availableAgents: HealthAgent[]; loading: boolean; errors: FormErrors; }
 type FormAction = | { type: 'SET_FIELD'; field: keyof Omit<FormState, 'phones' | 'procedures' | 'images'>; payload: unknown } | { type: 'SET_PROTOCOL'; payload: string } | { type: 'ADD_PHONE' } | { type: 'REMOVE_PHONE'; payload: number } | { type: 'UPDATE_PHONE'; payload: { index: number; value: string } } | { type: 'SET_PROCEDURES'; payload: ProcedureItem[] } | { type: 'SET_IMAGES'; payload: ImageFile[] } | { type: 'SET_AVAILABLE_AGENTS'; payload: HealthAgent[] } | { type: 'RESET_AGENTS' } | { type: 'SET_LOADING'; payload: boolean } | { type: 'SET_ERRORS'; payload: FormErrors } | { type: 'CLEAR_ERRORS' };
 const initialState: FormState = { protocol: "", patientName: "", priority: Priority.P4, susCard: "", receivedDate: new Date(), phones: [""], status: Status.PENDENTE, healthUnitId: "", healthAgentId: "", procedures: [], images: [], availableAgents: [], loading: false, errors: {} };
@@ -69,21 +80,14 @@ const Step1 = ({ state, dispatch, errors, healthUnits, healthAgents, loadingUnit
 
     return (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6 animate-in fade-in-50">
-            {/* Dados da Requisição */}
             <div className="md:col-span-2 space-y-2"><h3 className="text-lg font-medium">Dados da Requisição</h3><Separator /></div>
             <div className="space-y-2"><Label htmlFor="protocol">Protocolo *</Label><Input id="protocol" value={state.protocol} disabled className="bg-gray-100 dark:bg-gray-800" /></div>
             <div className="space-y-2"><Label htmlFor="receivedDate">Data de Recebimento *</Label><Popover><PopoverTrigger asChild><Button variant="outline" className={cn("w-full justify-start text-left font-normal", !state.receivedDate && "text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4" />{state.receivedDate ? format(state.receivedDate, "PPP", { locale: ptBR }) : "Selecione uma data"}</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><Calendar mode="single" selected={state.receivedDate} onSelect={(date) => date && dispatch({ type: 'SET_FIELD', field: 'receivedDate', payload: date })} initialFocus locale={ptBR} /></PopoverContent></Popover><FieldError messages={errors.receivedDate} /></div>
-
-            {/* Dados do Paciente */}
             <div className="md:col-span-2 space-y-2 mt-4"><h3 className="text-lg font-medium">Dados do Paciente</h3><Separator /></div>
             <div className="space-y-2"><Label htmlFor="patientName">Nome do Paciente *</Label><Input id="patientName" value={state.patientName} onChange={(e) => dispatch({ type: 'SET_FIELD', field: 'patientName', payload: e.target.value })} required /><FieldError messages={errors.patientName} /></div>
             <div className="space-y-2"><Label htmlFor="susCard">Cartão SUS *</Label><InputMask id="susCard" mask="999 9999 9999 9999" value={state.susCard} onChange={(e) => dispatch({ type: 'SET_FIELD', field: 'susCard', payload: e.target.value })} required /><FieldError messages={errors.susCard} /></div>
-
-            {/* Telefones */}
             <div className="md:col-span-2 space-y-2 mt-4"><div className="flex items-center justify-between"><h3 className="text-lg font-medium">Telefones de Contato</h3><Button type="button" onClick={() => dispatch({ type: 'ADD_PHONE' })} variant="outline" size="sm"><Plus className="h-4 w-4 mr-2" />Adicionar</Button></div><Separator /></div>
             <div className="space-y-4 md:col-span-2">{state.phones.map((phone, index) => (<div key={index} className="flex items-center space-x-2"><div className="flex-grow"><Label htmlFor={`phone-${index}`} className="sr-only">Telefone</Label><InputMask id={`phone-${index}`} mask="(99) 99999-9999" value={phone} onChange={(e) => dispatch({ type: 'UPDATE_PHONE', payload: { index, value: e.target.value } })} required={index === 0} />{index === 0 && <FieldError messages={errors.phones} />}</div>{index > 0 && (<Button type="button" onClick={() => dispatch({ type: 'REMOVE_PHONE', payload: index })} variant="ghost" size="icon"><Trash2 className="h-4 w-4 text-red-500" /></Button>)}</div>))}{state.phones.length === 0 && <FieldError messages={errors.phones} />}</div>
-
-            {/* Unidade de Saúde e Agentes */}
             <div className="md:col-span-2 space-y-2 mt-4"><h3 className="text-lg font-medium">Unidade de Saúde</h3><Separator /></div>
             <div className="space-y-2"><Label htmlFor="healthUnit">Unidade de Saúde *</Label><Select value={state.healthUnitId} onValueChange={(value) => dispatch({ type: 'SET_FIELD', field: 'healthUnitId', payload: value })} disabled={loadingUnits}><SelectTrigger>{loadingUnits ? "Carregando..." : <SelectValue placeholder="Selecione a unidade" />}</SelectTrigger><SelectContent>{healthUnits.map((unit) => (<SelectItem key={unit.id} value={unit.id}><div className="flex flex-col"><span className="font-semibold">{unit.name}</span><span className="text-xs text-muted-foreground">{unit.location} | Enf.: {unit.responsible_nurse}</span></div></SelectItem>))}</SelectContent></Select><FieldError messages={errors.healthUnitId} /></div>
             <div className="space-y-2">{state.healthUnitId && (<><Label htmlFor="healthAgent">Agente de Saúde *</Label><Select value={state.healthAgentId} onValueChange={(value) => dispatch({ type: 'SET_FIELD', field: 'healthAgentId', payload: value })} disabled={loadingAgents || healthAgents.length === 0}><SelectTrigger>{loadingAgents ? "Carregando..." : <SelectValue placeholder={healthAgents.length === 0 ? "Nenhum agente" : "Selecione o agente"} />}</SelectTrigger><SelectContent>{healthAgents.map((agent) => (<SelectItem key={agent.id} value={agent.id}><div className="flex flex-col"><span className="font-semibold">{agent.name} {agent.nickname && `(${agent.nickname})`}</span><span className="text-xs text-muted-foreground">Microárea: {agent.microarea}</span></div></SelectItem>))}</SelectContent></Select><FieldError messages={errors.healthAgentId} /></>)}</div>
@@ -103,7 +107,7 @@ const Step2 = ({ state, dispatch, errors }: { state: FormState, dispatch: React.
                         <Button
                             key={p}
                             type="button"
-                            variant={!isSelected ? "outline" : null}
+                            variant={!isSelected ? "outline" : undefined}
                             className={cn(
                                 "w-full justify-center transition-all",
                                 isSelected && PRIORITY_COLORS[p],
@@ -163,6 +167,7 @@ function NewRequisitionForm() {
             }
         };
         fetchAgents();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [state.healthUnitId]);
 
     useEffect(() => {
@@ -192,7 +197,18 @@ function NewRequisitionForm() {
             // eslint-disable-next-line @typescript-eslint/no-unused-vars
             const { phones, images, availableAgents, ...rest } = result.data;
             const filteredPhones = phones.filter((phone) => phone.trim() !== "");
-            const imageData = images.filter(img => img.uploaded && img.url).map(img => ({ id: img.id, name: img.name, size: img.size, url: img.url!, uploadedAt: new Date(), oneDriveId: img.oneDriveId }));
+
+            // CORREÇÃO: Mapeia o array de imagens para o formato correto do Firestore.
+            const imageData = images
+                .filter(img => img.uploaded && img.url)
+                .map(img => ({
+                    id: img.id,
+                    name: img.name,
+                    size: img.size,
+                    url: img.url!,
+                    uploadedAt: new Date(),
+                }));
+
             await RequisitionService.createRequisition({ ...rest, phones: filteredPhones, images: imageData.length > 0 ? imageData : undefined, createdBy: user?.uid || "", });
             router.push("/requisitions");
         } catch (error) {
