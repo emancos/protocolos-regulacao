@@ -167,7 +167,7 @@ function NewRequisitionForm() {
             }
         };
         fetchAgents();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+         
     }, [state.healthUnitId]);
 
     useEffect(() => {
