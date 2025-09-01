@@ -10,18 +10,16 @@ export interface UserProfile {
     email: string
     displayName: string
     role: UserRole
-    createdAt: Date
-    updatedAt: Date
-    createdBy?: string
-    updatedBy?: string
-    isActive: boolean
     additionalInfo?: {
         cpf?: string
         telefone?: string
         unidadeSaude?: string
-        especialidade?: string
-        crm?: string
-    }
+    },
+    isActive: boolean,
+    createdAt: Date
+    updatedAt: Date
+    createdBy?: string
+    updatedBy?: string
 }
 
 export const ROLE_PERMISSIONS = {
